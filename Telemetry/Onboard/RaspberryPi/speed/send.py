@@ -98,8 +98,9 @@ if __name__ == "__main__":
         # Wait briefly for connection to establish
         connect_timeout = 5 # seconds
         start_wait = time.time()
-        while not mqtt_connected and (time.time() - start_wait) < connect_timeout:
-            time.sleep(0.1)
+       # keep trying to reconnect forever!
+        while not mqtt_connected:
+            time.sleep(0.5)
 
         if not mqtt_connected:
             print(f"MQTT: Failed to connect within {connect_timeout} seconds. Exiting.")
