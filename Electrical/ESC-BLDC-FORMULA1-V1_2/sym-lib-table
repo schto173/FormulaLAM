@@ -1,0 +1,7 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "IR2101") (type "KiCad") (uri "${KIPRJMOD}/libraries/IR2101.kicad_sym") (options "") (descr ""))
+	(lib (name "DRV8353RSRGZT") (type "EAGLE") (uri "${KIPRJMOD}/DRV8353RSRGZT.lbr") (options "") (descr ""))
+	(lib (name "TPD4S010DQAR") (type "EAGLE") (uri "${KIPRJMOD}/libraries/TPD4S010DQAR.lbr") (options "") (descr ""))
+	(lib (name "bldc-hat") (type "KiCad") (uri "${KIPRJMOD}/bldc-hat.kicad_sym") (options "") (descr "project symbols"))
+)
