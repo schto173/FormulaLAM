@@ -50,7 +50,7 @@ modules only – the 5 V rail is 1 A in total and also feeds the Nucleo and the 
 | UART telemetry (UART4) | TX PC10, RX PC11 → `HardwareSerial Serial3(PC11, PC10)` |
 | CAN (FDCAN2) | TX PB6, RX PB12 |
 | Status LED | PB7 |
-| USB to the Pi | Nucleo ST-LINK virtual COM port (USART2, PA2/PA3) – no extra hardware |
+| USB to the Pi | Nucleo ST-LINK virtual COM port (LPUART1, PA2/PA3 = `Serial`) – no extra hardware |
 
 **Before the first power-up:**
 - Nucleo jumper **JP5 on E5V** (the Nucleo is powered from this board).
@@ -58,6 +58,13 @@ modules only – the 5 V rail is 1 A in total and also feeds the Nucleo and the 
   current-sense amplifier gain.
 - The motor should stop by itself if the control link drops (watchdog), and keep a hardware
   emergency stop that cuts motor power independently of any software.
+
+## Firmware
+
+`firmware/` is a PlatformIO project (VS Code + PlatformIO) for the first power-up with SimpleFOC, split
+into five steps: DRV8353 check → hall test → open loop → closed loop → FOC with current sensing.
+It also writes the DRV8353 settings (gate drive, overcurrent threshold, CSA gain).
+See [`firmware/README.md`](firmware/README.md).
 
 ## Manufacturing (JLCPCB)
 
