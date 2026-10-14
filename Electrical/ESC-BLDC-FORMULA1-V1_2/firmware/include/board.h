@@ -37,8 +37,23 @@
 // ---- bus protection (steps 3-5) -----------------------------------------------------------------------
 // A torque against the rotation turns the motor into a generator and pumps energy into the bus caps (660 uF).
 // A bench supply cannot take it back: ~1-2 J from the spinning can would lift 30 V far above 60 V.
-#define BUS_OV_LIMIT      40.0f   // V, checked every 1 ms -> driver off. Bench supply max 30 V; battery: ~62 V
 #define NO_REGEN_SPEED    3.0f    // rad/s: above this a torque target against the rotation is set to 0 (coast)
+
+// ---- supply: bench (BATTERY_CELLS 0) or Li-ion pack (env 5_foc_battery sets -D BATTERY_CELLS=12) ----------
+#ifndef BATTERY_CELLS
+#define BATTERY_CELLS     0
+#endif
+#if BATTERY_CELLS
+#define BUS_OV_LIMIT      (BATTERY_CELLS * 4.20f + 5.0f)  // 12S: 55.4 V (full 50.4 V + margin; TVS stand-off 60 V)
+#define BUS_START_MAX     (BATTERY_CELLS * 4.25f)         // 12S: 51.0 V - above: wrong pack, refuse to start
+#define BUS_UV_FULL       (BATTERY_CELLS * 3.20f)         // 12S: 38.4 V - full current above
+#define BUS_UV_ZERO       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - current derated linearly to 0 (coast)
+#else
+#define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
+#define BUS_START_MAX     35.0f
+#define BUS_UV_FULL       0.0f    // no under-voltage derating on the bench
+#define BUS_UV_ZERO       0.0f
+#endif
 
 // ---- throttle (J7: 1 = 3.3 V, 2 = signal, 3 = GND; 100k pull-down -> unplugged reads 0 V) - step 5 only --
 // Throttle 0..100 % -> 0..limit A (limit = CURRENT_LIMIT, change live with "L"). Calibrate live: release fully

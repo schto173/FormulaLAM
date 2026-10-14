@@ -259,6 +259,12 @@ void setup() {
   float vbus = ain::busVolts();
   Serial.print("bus voltage: "); Serial.print(vbus, 1); Serial.println(" V");
   if (!(vbus >= 9.0f)) halt("bus voltage below 9 V (DRV8353 minimum) - check the supply");
+  if (vbus > BUS_START_MAX) halt("bus voltage too high for this firmware (bench build on a battery? wrong pack?)");
+#if BATTERY_CELLS
+  Serial.print("battery build: "); Serial.print(BATTERY_CELLS); Serial.print("S, ");
+  Serial.print(vbus / BATTERY_CELLS, 2); Serial.println(" V per cell");
+  if (vbus < BUS_UV_ZERO) halt("battery below 3.0 V per cell (or not the configured cell count)");
+#endif
   if (!drv::begin(Serial)) halt("DRV8353 does not answer on SPI - run step 1");
 
   driver.voltage_power_supply = vbus;
@@ -352,6 +358,11 @@ static void temperatureTask() {
   // during a run, a stale value would put MORE voltage on the motor than commanded)
   float vb = ain::busVolts();
   if (vb > 9.0f) { driver.voltage_power_supply = vb; driver.voltage_limit = vb; }
+#if BATTERY_CELLS
+  // battery under-voltage: derate linearly to 0 (= coast, no stop). Under load the pack sags, so the current
+  // settles where the pack holds ~3.0-3.2 V per cell.
+  if (vb > 9.0f) k = min(k, constrain((vb - BUS_UV_ZERO) / (BUS_UV_FULL - BUS_UV_ZERO), 0.0f, 1.0f));
+#endif
 #if STAGE == 5
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;

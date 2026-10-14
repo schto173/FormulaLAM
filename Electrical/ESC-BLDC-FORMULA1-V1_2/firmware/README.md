@@ -51,6 +51,13 @@ bus capacitors would charge far above 60 V. So: a target against the rotation (a
 `MLU` can't be lowered while spinning, the bus is checked every 1 ms and the driver switches off above
 `BUS_OV_LIMIT` (40 V for the bench; raise it for the battery). The PWM follows the measured bus voltage.
 
+## Battery (12S Li-ion): environment `5_foc_battery`
+Same as step 5, built with `-D BATTERY_CELLS=12`: refuses to start below 36.0 V (3.0 V/cell) or above 51.0 V,
+over-voltage stop at 55.4 V, current derated linearly from 38.4 V (3.2 V/cell, full) to 36.0 V (0 = coast).
+The bench build (`5_foc_current`) refuses to start above 35 V, so it can't run on the pack by mistake.
+Before the first connection: polarity checked with a multimeter (the board has **no reverse-polarity
+protection**), anti-spark plug (XT90-S) for the 660 µF inrush, a small fuse in F1 for the first tests.
+
 ## Temperatures
 - **FET temperature** (NTC TH1 next to Q4) is always active.
 - **Motor temperature** (white wire, J8 pin 6): the sensor type is not known yet. Step 1 prints its resistance
