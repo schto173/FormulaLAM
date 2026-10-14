@@ -35,6 +35,12 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     No clear winner at no load (differences < the ±0.2 A scatter); both directions symmetric now (without
     smoothing 16.0 vs 17.2). Pick a fixed `zero_electric_angle` later under load. Starting from standstill
     needs ~1.5–2 A (cogging), T1 sometimes needs a push.
+  - Throttle (hall, on J7 3.3 V): 0.87 V released, 2.60 V full → defaults with dead band 0.97 / 2.55 V.
+  - 30 V bench, `MLU12`, throttle 100 % (5 A max): **265 rad/s ≈ 2530 rpm**, Iq ≈ 0.1 A at top speed, FET 27 °C,
+    motor 24 °C. Throttle 54 % → target 2.7 A, Iq 2.3 A. Coasting (Iq ≈ 0, Uq = back-EMF): 9.74 V @ 216 rad/s,
+    6.35 V @ 137 rad/s → **Ke = 0.046 V/(rad/s) phase peak → KV ≈ 120 rpm/V** (datasheet 110; KV is line-line,
+    i.e. √3 × phase – rough "110 rpm per volt of Uq" estimates earlier were off by that factor).
+    Max no-load speed ≈ Uq / 0.046: SinePWM Uq ≤ Vbus/2, SVPWM ≤ Vbus/√3 (58 V → ~700 rad/s ≈ 6700 rpm).
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
     load, higher speeds (`MLU` > 2), long runs / temperatures.
 
