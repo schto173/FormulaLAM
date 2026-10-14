@@ -11,7 +11,7 @@ hub motor with **SimpleFOC** (6-PWM, low-side current sensing, hall sensors).
 | Power stage | 6× TI CSD19532Q5B (100 V), 2 mΩ shunts, Kelvin sensing |
 | Logic supply | LM5164 buck → 5 V (Nucleo via E5V), Nucleo LDO → 3.3 V |
 | Protections | Bus TVS (SMCJ60A), fuse, ESD on voltage-sense (TPD4S010) and CAN (PESD1CAN), clamp diodes on hall inputs, DRV8353 VDS/OCP/UVLO |
-| Extras | FET temperature NTC, UART telemetry, CAN bus |
+| Extras | FET temperature NTC, motor temperature input, UART telemetry, CAN bus |
 
 Open `bldc-75v.kicad_pro` with **KiCad 10**. All libraries are in this folder and referenced with
 `${KIPRJMOD}`, so nothing needs to be installed.
@@ -22,7 +22,7 @@ Open `bldc-75v.kicad_pro` with **KiCad 10**. All libraries are in this folder an
 |---|---|---|
 | J5 | Battery, solder pads for 4 mm² wire | BAT+ / BAT− (use an XT90-S anti-spark plug in the cable) |
 | J6 | Motor phases, solder pads for 4 mm² wire | PHASE C / B / A (left → right) |
-| J8 | Hall sensors, JST-XH 5-pin | +5V, GND, A, B, C (as on the silkscreen) |
+| J8 | Hall sensors + motor temperature, JST-XH 6-pin | 1 +5V, 2 GND, 3 A, 4 B, 5 C, 6 TEMP (as on the silkscreen) |
 | J7 | Throttle / driver button, JST-XH 3-pin | 3V3, SIG, GND |
 | J9 | UART telemetry, JST-XH 4-pin | 1 = 5V, 2 = TX, 3 = RX, 4 = GND (3.3 V logic, 330 Ω series) |
 | J10 | CAN bus, JST-XH 3-pin | 1 = CAN_H, 2 = CAN_L, 3 = GND |
@@ -47,12 +47,14 @@ modules only – the 5 V rail is 1 A in total and also feeds the Nucleo and the 
 | Halls A / B / C | PB2 / PB1 / PC4 |
 | Throttle | PC1 |
 | FET temperature (NTC 10 k B3380, 10 k pull-up to 3.3 V) | PA6 (ADC2_IN3) |
+| Motor temperature (J8 pin 6, 2.2 k pull-up, 1 k series, 100 nF) | PA7 (ADC2_IN4) |
 | UART telemetry (UART4) | TX PC10, RX PC11 → `HardwareSerial Serial3(PC11, PC10)` |
 | CAN (FDCAN2) | TX PB6, RX PB12 |
 | Status LED | PB7 |
 | USB to the Pi | Nucleo ST-LINK virtual COM port (LPUART1, PA2/PA3 = `Serial`) – no extra hardware |
 
 **Before the first power-up:**
+- Bench supply **20–24 V** with a current limit: the 5 V regulator only switches on above 18 V.
 - Nucleo jumper **JP5 on E5V** (the Nucleo is powered from this board).
 - Firmware must set the DRV8353 over SPI: lower `VDS_LVL` for the CSD19532Q5B and pick the
   current-sense amplifier gain.
@@ -68,6 +70,10 @@ See [`firmware/README.md`](firmware/README.md).
 
 ## Manufacturing (JLCPCB)
 
+**Status:** V1.2 ordered at JLCPCB (files generated 2026-09-30); see `CLAUDE.md` for the full status,
+design decisions and the to-do list.
+
+
 Everything for the order is in `jlcpcb/`: `bldc-75v_gerbers.zip`, `bldc-75v_bom_jlc.csv`,
 `bldc-75v_cpl_jlc.csv` (rotations already corrected to JLC's footprints).
 
@@ -76,3 +82,9 @@ Order settings: 4 layers · ENIG · 2 oz outer / 1 oz inner copper · via coveri
 
 Not assembled on purpose: the Nucleo (plugs in), battery and motor wire pads (solder the wires),
 JP1 (it is only a copper bridge).
+
+## Tools
+
+`tools/` regenerates the JLC files and runs extra manufacturing checks (run with KiCad's Python):
+`gen_jlc.py` (BOM + pick-and-place with JLC rotation corrections), `overlay.py` (checks a footprint's rotation
+against JLC's own footprint), `dfm_checks.py` (silkscreen, rings, mask, GND islands, stitching).
