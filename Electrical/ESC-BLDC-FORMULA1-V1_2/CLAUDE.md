@@ -139,6 +139,8 @@ very low → current ripple; try 20 / 30 / 40 kHz PWM and compare battery curren
    SimpleFOC 2.4.0 always uses all three. Alternatives: lower PWM frequency, or a lower `MLU_MAX_FRACTION`.
 
 ## Ideas for board V2 (known weak spots of V1.2)
+Full draft plan: `V2-PLAN.md` (Nucleo-HAT size, option A supply = DRV buck 12 V for VM + small 12→5 V buck,
+encoder, inline current sense, energy meter, reverse-polarity protection, hardware e-stop/watchdog, scope GND points).
 - GND stitching vias are sparse (median ~10 mm, worst 42 mm in the empty area under the Nucleo) → add a 8–10 mm grid.
 - Copper pour only 0.25 mm from the V-scored top/bottom edges → keep ≥ 0.5 mm.
 - Reverse-polarity protection; shorter gate traces (now 30–45 mm); maybe the MCU directly on the board.
