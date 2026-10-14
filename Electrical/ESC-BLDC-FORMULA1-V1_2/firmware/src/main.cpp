@@ -1,5 +1,5 @@
 // ESC HAT bring-up with SimpleFOC. The step is chosen by the PlatformIO environment (-D STAGE=n):
-//   1 drv_check    DRV8353 answers on SPI, settings applied, bus voltage + FET temperature (no motor needed)
+//   1 drv_check    DRV8353 answers on SPI, settings applied, bus voltage, FET + motor temperature (no motor needed)
 //   2 hall_test    turn the wheel by hand: hall states, sequence check, pole-pair count (no PWM)
 //   3 open_loop    motor spins without sensors (low voltage)
 //   4 closed_loop  hall alignment + FOC in voltage mode
@@ -9,6 +9,7 @@
 #include <SimpleFOC.h>
 #include "board.h"
 #include "drv8353.h"
+#include "analog_in.h"
 
 #ifndef STAGE
 #define STAGE 1
@@ -32,10 +33,15 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   banner("DRV8353 check");
   Serial.print("bus voltage: "); Serial.print(readBusVoltage(), 1); Serial.println(" V");
+  if (!ain::begin(false)) Serial.println("ADC2 init FAILED");
   bool ok = drv::begin(Serial);
   Serial.println(ok ? "SPI OK - the DRV8353 is alive and configured"
                     : "SPI FAILED - check the supply, EN (PA11) and the SPI wiring");
   drv::printFaults(Serial);
+  float r = ain::motorSensorOhms();
+  Serial.print("motor temperature sensor (J8 pin 6): "); Serial.print(r, 0); Serial.print(" ohm -> ");
+  Serial.println(ain::motorSensorGuess(r));
+  Serial.println("  (valid at ROOM temperature; then set MOTOR_TEMP_SENSOR in include/board.h)");
 }
 
 void loop() {
@@ -43,9 +49,12 @@ void loop() {
   static uint32_t t = 0;
   if (millis() - t > 1000) {
     t = millis();
-    Serial.print("Vbus "); Serial.print(readBusVoltage(), 1);
-    Serial.print(" V | FET temp "); Serial.print(readFetTemperature(), 1);
-    Serial.print(" C | throttle "); Serial.print(analogRead(PIN_THROTTLE));
+    Serial.print("Vbus "); Serial.print(ain::busVolts(), 1);
+    Serial.print(" V | FET "); Serial.print(ain::fetCelsius(), 1);
+    Serial.print(" C | motor sensor "); Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm");
+    float tm = ain::motorCelsius();
+    if (!isnan(tm)) { Serial.print(" = "); Serial.print(tm, 1); Serial.print(" C"); }
+    Serial.print(" | throttle "); Serial.print(ain::throttle01() * 100.0f, 0); Serial.print(" %");
     Serial.print(" | nFAULT "); Serial.print(drv::faultActive() ? "LOW (fault) | " : "high | ");
     drv::printFaults(Serial);
   }
@@ -149,6 +158,7 @@ void setup() {
   motor.controller = MotionControlType::velocity_openloop;
   motor.target = 2;                                  // rad/s, change with T
   motor.init();
+  if (!ain::begin(false)) halt("ADC2 init failed");
 #else
   sensor.pullup = Pullup::USE_EXTERN;
   sensor.init();
@@ -160,6 +170,7 @@ void setup() {
 #if STAGE == 4
   motor.torque_controller = TorqueControlType::voltage;   // target in volts
   motor.init();
+  if (!ain::begin(false)) halt("ADC2 init failed");
 #else
   motor.torque_controller = TorqueControlType::foc_current;  // target in amps
   motor.current_limit = CURRENT_LIMIT;
@@ -167,6 +178,7 @@ void setup() {
   motor.init();
   if (!current_sense.init()) halt("current sense init failed");
   motor.linkCurrentSense(&current_sense);
+  if (!ain::begin(true)) halt("ADC2 not running after current sense init");   // from here on: no analogRead()!
 #endif
   if (!motor.initFOC()) halt("initFOC failed - see the messages above (hall order / pole pairs / align voltage)");
 #endif
@@ -179,11 +191,43 @@ void setup() {
   Serial.println("ready. T<value> sets the target, M for all motor commands (e.g. MVP0.2 velocity P gain).");
 }
 
+// Temperatures every 200 ms: full power below *_WARN, linear derating up to *_MAX, stop at *_MAX.
+static void temperatureTask() {
+  static uint32_t t = 0, tp = 0;
+  if (millis() - t < 200) return;
+  t = millis();
+  float tf = ain::fetCelsius(), tm = ain::motorCelsius();
+  if (isnan(tf)) halt("FET temperature sensor fault (TH1 open or shorted)");
+  float k = ain::derate(tf, FET_TEMP_WARN, FET_TEMP_MAX);
+#if MOTOR_TEMP_SENSOR != MOTOR_TEMP_UNKNOWN
+  k = min(k, ain::derate(tm, MOTOR_TEMP_WARN, MOTOR_TEMP_MAX));
+#endif
+  if (k <= 0.0f) halt("over-temperature");
+#if STAGE == 5
+  float lim = CURRENT_LIMIT * k;                     // A
+  motor.current_limit = lim;
+#else
+  float lim = VOLTAGE_LIMIT * k;                     // V
+  motor.voltage_limit = lim;
+#endif
+  motor.PID_velocity.limit = lim;                    // velocity mode (MC1): its output is the torque command
+  if (motor.controller == MotionControlType::torque) motor.target = constrain(motor.target, -lim, lim);
+  if (millis() - tp >= 1000) {
+    tp = millis();
+    Serial.print("# FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
+    if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
+    else { Serial.print(tm, 1); Serial.print(" C"); }
+    Serial.print(" | Vbus "); Serial.print(ain::busVolts(), 1); Serial.print(" V | power "); Serial.print(k * 100.0f, 0);
+    Serial.println(" %");
+  }
+}
+
 void loop() {
   motor.loopFOC();
   motor.move();
   command.run();
   motor.monitor();
+  temperatureTask();
   if (drv::faultActive()) halt("DRV8353 nFAULT");
   blink();
 }

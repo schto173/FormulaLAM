@@ -8,6 +8,22 @@
 #define VOLTAGE_LIMIT     3.0f    // V max applied to the motor in steps 3-4 (start low!)
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
 
+// ---- motor temperature sensor (white wire, J8 pin 6) ------------------------------------------------
+// Type unknown so far: step 1 prints the sensor resistance and a guess. Set it here, then steps 3-5 show
+// the motor temperature in C and derate / stop on over-temperature.
+#define MOTOR_TEMP_UNKNOWN 0
+#define MOTOR_TEMP_NTC10K  1
+#define MOTOR_TEMP_KTY84   2
+#define MOTOR_TEMP_PT1000  3
+#define MOTOR_TEMP_SENSOR  MOTOR_TEMP_UNKNOWN
+#define MOTOR_NTC_BETA     3950.0f // only for NTC10K; 3950 is the usual motor NTC (check the motor's spec)
+
+// ---- temperature protection (steps 3-5): full power below WARN, linear derating, motor stops at MAX ----
+#define FET_TEMP_WARN     80.0f   // C, NTC TH1 on the board next to Q4
+#define FET_TEMP_MAX     100.0f
+#define MOTOR_TEMP_WARN   90.0f   // C, only active once MOTOR_TEMP_SENSOR is set
+#define MOTOR_TEMP_MAX   110.0f
+
 // ---- gate driver (DRV8353RS) --------------------------------------------------------------------
 // 6-PWM on TIM1 complementary pairs: phase A = CH3/CH3N, B = CH2/CH2N, C = CH1/CH1N
 #define PIN_INHA   PA10
@@ -35,23 +51,17 @@
 #define PIN_HALL_B PB1
 #define PIN_HALL_C PC4            // 4.7k pull-ups to 3.3 V on the board
 #define PIN_VBUS   PC3            // divider 383k / 9.76k
-#define PIN_NTC    PA6            // 10k pull-up to 3.3 V, NTC 10k B3380 to GND (next to Q4)
+#define PIN_NTC    PA6            // 10k pull-up to 3.3 V, NTC 10k B3380 to GND (next to Q4)       ADC2_IN3
+#define PIN_MOT_TEMP PA7          // motor sensor: 2.2k pull-up to 3.3 V, 1k series, 100 nF         ADC2_IN4
 #define PIN_THROTTLE PC1
 #define PIN_LED    PB7
 
 #define VBUS_DIVIDER ((383.0f + 9.76f) / 9.76f)
 
-inline float readBusVoltage() {       // only call BEFORE SimpleFOC current sensing is started
+// Uses analogRead(): only call BEFORE ain::begin() (see analog_in.h - analogRead() resets ADC1+ADC2).
+inline float readBusVoltage() {
   analogReadResolution(12);
   float v = 0;
   for (int i = 0; i < 16; i++) v += analogRead(PIN_VBUS);
   return v / 16.0f / 4095.0f * 3.3f * VBUS_DIVIDER;
-}
-
-inline float readFetTemperature() {   // degC, same caveat as above
-  analogReadResolution(12);
-  float v = analogRead(PIN_NTC) / 4095.0f * 3.3f;
-  if (v < 0.01f || v > 3.29f) return NAN;          // open or shorted
-  float r = 10000.0f * v / (3.3f - v);
-  return 1.0f / (1.0f / 298.15f + logf(r / 10000.0f) / 3380.0f) - 273.15f;
 }

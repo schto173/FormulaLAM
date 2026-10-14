@@ -69,14 +69,19 @@ very low → current ripple; try 20 / 30 / 40 kHz PWM and compare battery curren
 - DRV8353 registers written at start (`include/drv8353.h`, SPI mode 1, 16-bit): GATE_HS 0x333 / GATE_LS 0x733
   (IDRIVE 150 mA source / 300 mA sink instead of the very hard 1000/2000 mA default), OCP 0x157 (100 ns dead time,
   auto-retry, VDS_LVL 0.4 V instead of 1 V which would never trip), CSA 0x280 (gain 20, VREF/2), DRV_CTRL 6×PWM.
-- `analogRead()` must not be used on ADC2 pins (PA6, PA7) after `current_sense.init()`: it re-initialises ADC2 and
-  breaks SimpleFOC's injected current sampling. `readBusVoltage()` (PC3) is only called before init.
+- **Never call `analogRead()` once SimpleFOC's current sensing runs – on any pin.** The STM32 core de-inits the ADC
+  after each `analogRead()` and force-resets ADC1+ADC2 together (shared ADC12 reset/clock), wiping SimpleFOC's
+  injected setup on ADC2. All slow analog inputs go through `include/analog_in.h` instead: register-level single
+  conversions on ADC2's free regular group (PA6 = IN3 FET NTC, PA7 = IN4 motor sensor, PC1 = IN7 throttle,
+  PC3 = IN9 bus voltage). `readBusVoltage()` (analogRead) is only used once at start-up, before `ain::begin()`.
+- Temperature protection (steps 3–5, `temperatureTask()` in main.cpp): every 200 ms; full power below
+  FET 80 °C / motor 90 °C, linear derating, stop at 100 °C / 110 °C (motor only once `MOTOR_TEMP_SENSOR` is set).
 
 ### Firmware TODO (rough priority)
 1. Hardware bring-up, steps 1–5 (`firmware/README.md`), at 20–24 V with a current limit.
 2. Heartbeat/watchdog: no valid command for ~200 ms → `motor.disable()`; plus a hardware e-stop.
-3. FET + motor temperature while running (ADC2 regular conversion without re-init, or read while disabled),
-   print the motor sensor's resistance to identify its type, current derating with temperature.
+3. ~~FET + motor temperature, derating~~ done (2026-10-14, compiled, untested on hardware). Still to do: identify
+   the motor sensor type from step 1's resistance reading and set `MOTOR_TEMP_SENSOR` in `include/board.h`.
 4. Driver button: ramp the current target (e.g. +2 A/s up to ~13–18 A), coast = disable.
 5. Tuning: `characteriseMotor()` for R/L, current PID P = L·ωc, I = R·ωc; SpaceVectorPWM; `SmoothingSensor`
    (SimpleFOCDrivers) for the halls; `sensor.velocity_max ≈ 800` rad/s; hard-code `zero_electric_angle` and

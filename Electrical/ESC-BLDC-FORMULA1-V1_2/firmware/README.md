@@ -13,7 +13,7 @@ Monitor**. Do them in order.
 
 | Env | Motor | Supply | What you should see |
 |---|---|---|---|
-| `1_drv_check` | not needed | bench supply **20–24 V**, current limit 0.3 A | all settings `ok`, "SPI OK", no faults, plausible bus voltage and temperature |
+| `1_drv_check` | not needed | bench supply **20–24 V**, current limit 0.3 A | all settings `ok`, "SPI OK", no faults, plausible bus voltage, FET temperature, motor sensor resistance + type guess |
 | `2_hall_test` | connected, turn by hand | same | states 1–6 only, never 0 or 7; one wheel turn → pole pairs |
 | `3_open_loop` | connected | 20–24 V, limit ~1 A | motor turns slowly and smoothly. `T5` = faster, `T-5` = reverse, `T0` stop |
 | `4_closed_loop` | connected | same | alignment wiggle at start, then `T0.5` … `T2` (volts) gives torque |
@@ -23,6 +23,17 @@ Monitor**. Do them in order.
 off again below 16.8 V). Below that the Nucleo stays dark, so always bring up at 20–24 V.
 
 Before step 3: put the real pole pair count from step 2 into `POLE_PAIRS` in `include/board.h`.
+
+## Temperatures
+- **FET temperature** (NTC TH1 next to Q4) is always active.
+- **Motor temperature** (white wire, J8 pin 6): the sensor type is not known yet. Step 1 prints its resistance
+  and a guess (at room temperature: ~10 kΩ = NTC 10k, ~600 Ω = KTY84, ~1.1 kΩ = PT1000). Set
+  `MOTOR_TEMP_SENSOR` in `include/board.h` accordingly (for an NTC also check `MOTOR_NTC_BETA`, usually 3950).
+- Steps 3–5 print a `# FET … | motor … | Vbus … | power …%` line every second. Above `FET_TEMP_WARN` /
+  `MOTOR_TEMP_WARN` the voltage/current limit is reduced linearly; at `*_MAX` the motor stops.
+- All slow analog values (temperatures, throttle, bus voltage) are read through `include/analog_in.h`.
+  **Never use `analogRead()` once the motor runs**: the STM32 core resets ADC1 and ADC2 after every
+  `analogRead()`, which destroys SimpleFOC's current sensing.
 
 ## If something goes wrong
 - **"SPI FAILED"** in step 1: supply below 9 V, EN not high, or a wrong/missing Nucleo jumper.
