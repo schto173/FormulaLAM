@@ -38,8 +38,9 @@
 // Throttle 0..100 % -> 0..limit A (limit = CURRENT_LIMIT, change live with "L"). Calibrate live: release fully
 // + "AI", press fully + "AF"; then put the printed values here.
 #define THROTTLE_ON_AT_START 1    // 1: throttle controls the current after start-up ("A0" = off, T commands again)
-#define THROTTLE_IDLE_V   0.30f   // V at and below: 0 A
-#define THROTTLE_FULL_V   3.00f   // V at and above: full current
+// hall throttle on 3.3 V (2026-10-14): ~0.87 V released, ~2.60 V fully pressed -> with dead band:
+#define THROTTLE_IDLE_V   0.97f   // V at and below: 0 A
+#define THROTTLE_FULL_V   2.55f   // V at and above: full current
 #define THROTTLE_FAULT_V  3.25f   // V above: broken wire / short to 3.3 V -> 0 A, must be released to re-arm
 #define THROTTLE_RAMP_A_S 10.0f   // A/s the current may rise (it drops immediately when released)
 

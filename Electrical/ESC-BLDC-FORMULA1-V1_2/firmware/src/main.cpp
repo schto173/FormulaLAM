@@ -195,8 +195,11 @@ void doThrottle(char *cmd) {
     case '1': thrOn = true; thrArmed = false; thrTarget = 0.0f; motor.target = 0.0f;
               Serial.println("throttle ON - release it fully to arm"); break;
     case '0': thrOff("throttle OFF, target 0 - T commands work again"); break;
-    case 'I': thrIdle = v; Serial.print("throttle idle = "); Serial.print(v, 2); Serial.println(" V"); break;
-    case 'F': thrFull = v; Serial.print("throttle full = "); Serial.print(v, 2); Serial.println(" V"); break;
+    // dead band: idle 0.1 V above the released reading (noise must not count as "pressed"), full 0.05 V below
+    case 'I': thrIdle = v + 0.10f; Serial.print("released "); Serial.print(v, 2); Serial.print(" V -> idle = ");
+              Serial.print(thrIdle, 2); Serial.println(" V"); break;
+    case 'F': thrFull = v - 0.05f; Serial.print("pressed "); Serial.print(v, 2); Serial.print(" V -> full = ");
+              Serial.print(thrFull, 2); Serial.println(" V"); break;
     default:  break;
   }
   if (thrFull < thrIdle + 0.2f) Serial.println("WARNING: full must be at least 0.2 V above idle - recalibrate (AI / AF)");
