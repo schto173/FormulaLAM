@@ -217,6 +217,8 @@ void setup() {
   motor.PID_current_q.P = CURR_Q_P;
   motor.PID_current_d.P = CURR_D_P;
   motor.PID_current_q.I = motor.PID_current_d.I = CURR_I;
+  // current filter as MFC200 sets it (cutoff 5x the 200 Hz loop bandwidth); the default ~300 Hz adds lag
+  motor.LPF_current_q.Tf = motor.LPF_current_d.Tf = 1.0f / (_2PI * 1000.0f);
   current_sense.linkDriver(&driver);
   motor.init();
   ain::end();                                        // hand ADC2 back: SimpleFOC sets it up from scratch
