@@ -23,8 +23,20 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   - Step 4 ✓: initFOC ok – `sensor dir: CCW`, `PP check: OK`, `Zero elec. angle: 3.14`. Voltage mode, no load:
     T0.3 barely turns (cogging + dead time), T1.0 → 16 rad/s (KV 110 predicts ~11.5 → hall 60° steps probably
     lead the voltage a bit; compare with the reverse speed). FET 28 °C, motor 22 °C.
-  - Step 5 prepared, untested: start current PI P 0.05 / I 50 (SimpleFOC defaults P 3 / I 300 are for ~10 Ω
-    gimbal motors), `FOC_VOLTAGE_LIMIT` 1 V; measure R/L with `MFP0.4`, then tune with `MFC200`.
+  - Step 5 ✓: current sense align `Success: 1` (A/C pin fix + gain sign +20 confirmed), ADC2 + TIM1 trigger.
+    `MFP0.4` twice: R 0.16 / 0.24 Ω (line-line incl. FETs/wires, dead time inflates it), Ld 50–60 µH,
+    Lq 70–90 µH, "New el. zero" 2.74 both times (hall alignment says 3.14). `MFC200` → Pq 0.09, Pd 0.06,
+    I 199 = firmware defaults now (`CURR_*` in board.h), current LPF 1 kHz. `MFC100` sounded the same.
+  - Noise fixes: 512-byte serial TX buffer (the 1 Hz status line blocked loopFOC → "clack"), SmoothingSensor
+    (SimpleFOCDrivers 1.0.9) between HallSensor and motor (`HALL_SMOOTHING`) → smooth; a remaining deep
+    hum/"brrr" at low speed is hall ripple + cogging (12N14P → 84 cogging steps/turn). A metallic tick once
+    per turn was a circlip rubbing on the mounting plate (mechanical, fixed).
+  - At 1 V (`MLU1`), no load, smoothing on: 3.14 → ±17.6 rad/s, Iq ~0.4 A; 2.74 → ±17.3 rad/s, Iq ~0.27 A.
+    No clear winner at no load (differences < the ±0.2 A scatter); both directions symmetric now (without
+    smoothing 16.0 vs 17.2). Pick a fixed `zero_electric_angle` later under load. Starting from standstill
+    needs ~1.5–2 A (cogging), T1 sometimes needs a push.
+  - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
+    load, higher speeds (`MLU` > 2), long runs / temperatures.
 
 ## Folder
 | Path | What |
