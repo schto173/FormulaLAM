@@ -54,7 +54,7 @@ void loop() {
     Serial.print(" C | motor sensor "); Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm");
     float tm = ain::motorCelsius();
     if (!isnan(tm)) { Serial.print(" = "); Serial.print(tm, 1); Serial.print(" C"); }
-    Serial.print(" | throttle "); Serial.print(ain::throttle01() * 100.0f, 0); Serial.print(" %");
+    Serial.print(" | throttle "); Serial.print(ain::throttleVolts(), 2); Serial.print(" V");
     Serial.print(" | nFAULT "); Serial.print(drv::faultActive() ? "LOW (fault) | " : "high | ");
     drv::printFaults(Serial);
   }
@@ -145,7 +145,15 @@ static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = 15.0f;
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
 void doLimit(char *cmd) { float v = limitBase; command.scalar(&v, cmd); limitBase = constrain(v, 0.0f, LIMIT_CAP); }
-void doMotor(char *cmd)  { command.motor(&motor, cmd); }
+void doMotor(char *cmd) {
+  // lowering the voltage limit below the back-EMF while spinning brakes regeneratively (see BUS_OV_LIMIT)
+  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2] && atof(cmd + 2) < motor.voltage_limit &&
+      fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
+    Serial.println("refused: lowering MLU while spinning brakes into the supply - T0 / release, wait until it stops");
+    return;
+  }
+  command.motor(&motor, cmd);
+}
 
 static bool pwmReady = false;
 static void halt(const char *why) {
@@ -155,6 +163,76 @@ static void halt(const char *why) {
   drv::printFaults(Serial);
   while (true) { digitalWrite(PIN_LED, !digitalRead(PIN_LED)); delay(100); }
 }
+
+// Every 1 ms: bus over-voltage -> driver off (it then coasts; on the bench the back-EMF stays below the bus).
+static void busTask() {
+  static uint32_t t = 0;
+  if (micros() - t < 1000) return;
+  t = micros();
+  float vb = ain::busVolts(1);
+  if (vb > BUS_OV_LIMIT) halt("bus over-voltage - energy pumped back into a supply that cannot take it?");
+}
+
+// No regenerative braking: a torque target against the rotation (above NO_REGEN_SPEED) becomes 0 = coast.
+static void noRegenTask() {
+  if (motor.controller != MotionControlType::torque) return;
+  if (motor.target * motor.shaft_velocity < 0.0f && fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
+    motor.target = 0.0f;
+    static uint32_t tw = 0;
+    if (millis() - tw > 1000) { tw = millis(); Serial.println("# no regen: target against the rotation -> 0, wait until it stops"); }
+  }
+}
+
+#if STAGE == 5
+// ---- throttle: 0..100 % -> 0..limitBase A, must be released once before it acts ("armed") ----------------
+static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
+static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrTarget = 0.0f, thrPct = 0.0f;
+static void thrOff(const char *why) { thrOn = false; thrTarget = 0.0f; motor.target = 0.0f; Serial.println(why); }
+// "A1" on, "A0" off, "AI" idle = now, "AF" full = now, "A" status
+void doThrottle(char *cmd) {
+  float v = ain::throttleVolts();
+  switch (cmd[0]) {
+    case '1': thrOn = true; thrArmed = false; thrTarget = 0.0f; motor.target = 0.0f;
+              Serial.println("throttle ON - release it fully to arm"); break;
+    case '0': thrOff("throttle OFF, target 0 - T commands work again"); break;
+    case 'I': thrIdle = v; Serial.print("throttle idle = "); Serial.print(v, 2); Serial.println(" V"); break;
+    case 'F': thrFull = v; Serial.print("throttle full = "); Serial.print(v, 2); Serial.println(" V"); break;
+    default:  break;
+  }
+  if (thrFull < thrIdle + 0.2f) Serial.println("WARNING: full must be at least 0.2 V above idle - recalibrate (AI / AF)");
+  Serial.print("throttle "); Serial.print(thrOn ? (thrArmed ? "ON, armed" : "ON, not armed (release it)") : "OFF");
+  Serial.print(" | now "); Serial.print(v, 2); Serial.print(" V | idle "); Serial.print(thrIdle, 2);
+  Serial.print(" V | full "); Serial.print(thrFull, 2); Serial.print(" V | max "); Serial.print(limitBase, 1);
+  Serial.println(" A");
+}
+static void throttleTask() {
+  static uint32_t t = 0;
+  uint32_t now = millis();
+  if (now - t < 10) return;
+  float dt = min((now - t) * 1e-3f, 0.05f);
+  t = now;
+  if (!thrOn) return;
+  float v = ain::throttleVolts();
+  float x = 0.0f;
+  if (isnan(v) || v > THROTTLE_FAULT_V || thrFull < thrIdle + 0.2f) {
+    if (thrArmed) Serial.println("# throttle signal invalid (open / short to 3.3 V / bad calibration) -> 0 A");
+    thrArmed = false;
+  } else {
+    x = constrain((v - thrIdle) / (thrFull - thrIdle), 0.0f, 1.0f);
+  }
+  thrPct = x * 100.0f;
+  if (!thrArmed) {
+    thrTarget = 0.0f; motor.target = 0.0f;
+    if (x <= 0.0f && !isnan(v) && v <= THROTTLE_FAULT_V && thrFull >= thrIdle + 0.2f) {
+      thrArmed = true; Serial.println("# throttle armed");
+    }
+    return;
+  }
+  float want = x * limitBase;                        // A; temperatureTask additionally clamps to the derated limit
+  thrTarget = (want > thrTarget) ? min(want, thrTarget + THROTTLE_RAMP_A_S * dt) : want;
+  motor.target = thrTarget;
+}
+#endif
 
 void setup() {
   Serial.begin(115200);
@@ -232,11 +310,19 @@ void setup() {
   command.add('T', doTarget, "target");
   command.add('L', doLimit, "limit (V in steps 3-4, A in step 5)");
   command.add('M', doMotor, "motor");
+#if STAGE == 5
+  command.add('A', doThrottle, "throttle: A1 on, A0 off, AI idle=now, AF full=now");
+#endif
   motor.useMonitoring(Serial);
   motor.monitor_downsample = 0;                      // off: it floods the terminal (hundreds of lines/s).
   motor.monitor_variables = _MON_TARGET | _MON_VEL | _MON_VOLT_Q | _MON_CURR_Q;   // "MMD500" switches it on
   Serial.println("ready. T<value> sets the target, M for all motor commands (e.g. MVP0.2 velocity P gain).");
-  Serial.println("status every second: # target | speed | Uq | Iq | FET | motor | Vbus | power");
+  Serial.println("status every second: # target | speed | Uq | limit | Iq | throttle | FET | motor | Vbus | power");
+  Serial.print("bus over-voltage stop at "); Serial.print(BUS_OV_LIMIT, 0); Serial.println(" V, no regenerative braking");
+#if STAGE == 5
+  if (thrOn) Serial.println("THROTTLE is ON: T commands are overridden - type A0 to use T, A for throttle status");
+  char none[] = ""; doThrottle(none);
+#endif
 }
 
 // Temperatures every 200 ms: full power below *_WARN, linear derating up to *_MAX, stop at *_MAX.
@@ -251,6 +337,10 @@ static void temperatureTask() {
   k = min(k, ain::derate(tm, MOTOR_TEMP_WARN, MOTOR_TEMP_MAX));
 #endif
   if (k <= 0.0f) halt("over-temperature");
+  // follow the real bus voltage: SimpleFOC turns volts into duty cycle with it (if the supply is turned up
+  // during a run, a stale value would put MORE voltage on the motor than commanded)
+  float vb = ain::busVolts();
+  if (vb > 9.0f) { driver.voltage_power_supply = vb; driver.voltage_limit = vb; }
 #if STAGE == 5
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;
@@ -268,11 +358,12 @@ static void temperatureTask() {
     Serial.print(" | limit "); Serial.print(lim, 2);
 #if STAGE == 5
     Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");
+    if (thrOn) { Serial.print(" | thr "); Serial.print(thrArmed ? "" : "(not armed) "); Serial.print(thrPct, 0); Serial.print(" %"); }
 #endif
     Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
     if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
     else { Serial.print(tm, 1); Serial.print(" C"); }
-    Serial.print(" | Vbus "); Serial.print(ain::busVolts(), 1); Serial.print(" V | power "); Serial.print(k * 100.0f, 0);
+    Serial.print(" | Vbus "); Serial.print(vb, 1); Serial.print(" V | power "); Serial.print(k * 100.0f, 0);
     Serial.println(" %");
   }
 }
@@ -282,6 +373,11 @@ void loop() {
   motor.move();
   command.run();
   motor.monitor();
+#if STAGE == 5
+  throttleTask();
+#endif
+  noRegenTask();
+  busTask();
   temperatureTask();
   if (drv::faultActive()) halt("DRV8353 nFAULT");
   blink();

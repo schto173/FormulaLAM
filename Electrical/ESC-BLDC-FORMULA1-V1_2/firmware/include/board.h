@@ -28,6 +28,21 @@
 #define MOTOR_TEMP_SENSOR  MOTOR_TEMP_NTC10K   // measured 11.85 kOhm at ~21 C room temperature (2026-10-14)
 #define MOTOR_NTC_BETA     3950.0f // only for NTC10K; 3950 is the usual motor NTC (check the motor's spec)
 
+// ---- bus protection (steps 3-5) -----------------------------------------------------------------------
+// A torque against the rotation turns the motor into a generator and pumps energy into the bus caps (660 uF).
+// A bench supply cannot take it back: ~1-2 J from the spinning can would lift 30 V far above 60 V.
+#define BUS_OV_LIMIT      40.0f   // V, checked every 1 ms -> driver off. Bench supply max 30 V; battery: ~62 V
+#define NO_REGEN_SPEED    3.0f    // rad/s: above this a torque target against the rotation is set to 0 (coast)
+
+// ---- throttle (J7: 1 = 3.3 V, 2 = signal, 3 = GND; 100k pull-down -> unplugged reads 0 V) - step 5 only --
+// Throttle 0..100 % -> 0..limit A (limit = CURRENT_LIMIT, change live with "L"). Calibrate live: release fully
+// + "AI", press fully + "AF"; then put the printed values here.
+#define THROTTLE_ON_AT_START 1    // 1: throttle controls the current after start-up ("A0" = off, T commands again)
+#define THROTTLE_IDLE_V   0.30f   // V at and below: 0 A
+#define THROTTLE_FULL_V   3.00f   // V at and above: full current
+#define THROTTLE_FAULT_V  3.25f   // V above: broken wire / short to 3.3 V -> 0 A, must be released to re-arm
+#define THROTTLE_RAMP_A_S 10.0f   // A/s the current may rise (it drops immediately when released)
+
 // ---- temperature protection (steps 3-5): full power below WARN, linear derating, motor stops at MAX ----
 #define FET_TEMP_WARN     80.0f   // C, NTC TH1 on the board next to Q4
 #define FET_TEMP_MAX     100.0f

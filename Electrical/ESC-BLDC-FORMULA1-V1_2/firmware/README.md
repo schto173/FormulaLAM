@@ -38,6 +38,19 @@ off again below 16.8 V). Below that the Nucleo stays dark, so always bring up at
 
 Before step 3: put the real pole pair count from step 2 into `POLE_PAIRS` in `include/board.h`.
 
+## Throttle (step 5)
+Throttle on J7 (1 = 3.3 V, 2 = signal, 3 = GND). It sets the motor current: 0–100 % → 0 … `L` amps (default
+`CURRENT_LIMIT` 5 A). It is on after start-up (`THROTTLE_ON_AT_START`) but only acts after it has been released
+once ("armed"); the current rises at most 10 A/s and drops at once when released. Commands: `A` status,
+`AI` idle = now (released), `AF` full = now (pressed fully), `A0` off (T commands work again), `A1` on.
+Put the calibrated volts into `THROTTLE_IDLE_V` / `THROTTLE_FULL_V` in `include/board.h`.
+
+## Bus protection (steps 3–5)
+A torque against the rotation makes the motor a generator; a bench supply cannot take that energy back and the
+bus capacitors would charge far above 60 V. So: a target against the rotation (above 3 rad/s) becomes 0 (coast),
+`MLU` can't be lowered while spinning, the bus is checked every 1 ms and the driver switches off above
+`BUS_OV_LIMIT` (40 V for the bench; raise it for the battery). The PWM follows the measured bus voltage.
+
 ## Temperatures
 - **FET temperature** (NTC TH1 next to Q4) is always active.
 - **Motor temperature** (white wire, J8 pin 6): the sensor type is not known yet. Step 1 prints its resistance

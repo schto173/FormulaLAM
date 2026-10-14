@@ -145,7 +145,8 @@ inline const char *motorSensorGuess(float r) {
   if (r > 4000.0f && r < 30000.0f) return "probably NTC 10k (10 kohm at 25 C)";
   return "unknown type - measure at two temperatures";
 }
-inline float busVolts() { float r = avg(CH_VBUS); return isnan(r) ? NAN : r / 4095.0f * 3.3f * VBUS_DIVIDER; }
+inline float busVolts(int n = 8) { float r = avg(CH_VBUS, n); return isnan(r) ? NAN : r / 4095.0f * 3.3f * VBUS_DIVIDER; }
+inline float throttleVolts() { float r = avg(CH_THROTTLE, 4); return isnan(r) ? NAN : r / 4095.0f * 3.3f; }
 inline float throttle01() { float r = avg(CH_THROTTLE, 4); return isnan(r) ? NAN : r / 4095.0f; }
 
 // 1.0 below warn, falling linearly to 0.0 at max (NaN temperature = no derating)
