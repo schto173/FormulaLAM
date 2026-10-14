@@ -12,6 +12,12 @@
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
 #define FOC_VOLTAGE_LIMIT 1.0f    // V the current controller may apply in step 5 (caps the no-load speed at
                                   // ~15 rad/s; change live with "MLU<volts>")
+// SpaceVectorPWM: max phase voltage Vbus/sqrt(3) instead of Vbus/2 (+15.5 %): 5000 rpm needs ~26 V per phase
+// -> SinePWM only above ~52 V bus, SVPWM above ~45 V (most of a 14S battery). Same switching losses.
+#define USE_SVPWM         1
+// MLU is refused above this fraction of Vbus: keeps a few % margin so the low-side shunts still get time
+// to measure (SVPWM max 0.577, SinePWM max 0.5)
+#define MLU_MAX_FRACTION  (USE_SVPWM ? 0.55f : 0.45f)
 #define HALL_SMOOTHING    1       // 1 = SmoothingSensor interpolates between the 60-degree hall steps (steps 4-5)
 // Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
 #define CURR_Q_P          0.09f

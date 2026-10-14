@@ -152,6 +152,11 @@ void doMotor(char *cmd) {
     Serial.println("refused: lowering MLU while spinning brakes into the supply - T0 / release, wait until it stops");
     return;
   }
+  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2] && atof(cmd + 2) > MLU_MAX_FRACTION * driver.voltage_power_supply) {
+    Serial.print("refused: MLU max is "); Serial.print(MLU_MAX_FRACTION * driver.voltage_power_supply, 1);
+    Serial.println(" V at this bus voltage (above it the phases clip and the current sensing fails)");
+    return;
+  }
   command.motor(&motor, cmd);
 }
 
@@ -269,6 +274,9 @@ void setup() {
   pwmReady = true;
   motor.voltage_limit = VOLTAGE_LIMIT;
   motor.velocity_limit = 50;                         // rad/s
+#if USE_SVPWM
+  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
+#endif
 
 #if STAGE == 3
   motor.controller = MotionControlType::velocity_openloop;
