@@ -12,6 +12,11 @@
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
 #define FOC_VOLTAGE_LIMIT 1.0f    // V the current controller may apply in step 5 (caps the no-load speed at
                                   // ~15 rad/s; change live with "MLU<volts>")
+#define HALL_SMOOTHING    1       // 1 = SmoothingSensor interpolates between the 60-degree hall steps (steps 4-5)
+// Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
+#define CURR_Q_P          0.09f
+#define CURR_D_P          0.06f
+#define CURR_I            200.0f
 
 // ---- motor temperature sensor (white wire, J8 pin 6) ------------------------------------------------
 // Type unknown so far: step 1 prints the sensor resistance and a guess. Set it here, then steps 3-5 show

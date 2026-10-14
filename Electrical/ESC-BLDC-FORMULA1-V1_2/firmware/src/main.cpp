@@ -125,6 +125,12 @@ void loop() {
 BLDCMotor motor = BLDCMotor(POLE_PAIRS);
 BLDCDriver6PWM driver = BLDCDriver6PWM(PIN_INHA, PIN_INLA, PIN_INHB, PIN_INLB, PIN_INHC, PIN_INLC);  // EN is ours
 HallSensor sensor = HallSensor(PIN_HALL_A, PIN_HALL_B, PIN_HALL_C, POLE_PAIRS);
+#if HALL_SMOOTHING
+#include "encoders/smoothing/SmoothingSensor.h"
+// predicts the angle between hall edges from the speed (max one 60-degree step ahead); the HallSensor
+// constructor also sets phase_correction = -30 deg el., because a hall edge marks the START of a sector
+SmoothingSensor smooth = SmoothingSensor(sensor, motor);
+#endif
 LowsideCurrentSense current_sense = LowsideCurrentSense(SHUNT_OHMS, CSA_GAIN, PIN_SOA, PIN_SOB, PIN_SOC);
 Commander command = Commander(Serial);
 
@@ -191,7 +197,11 @@ void setup() {
   sensor.pullup = Pullup::USE_EXTERN;
   sensor.init();
   sensor.enableInterrupts(doA, doB, doC);
+#if HALL_SMOOTHING
+  motor.linkSensor(&smooth);
+#else
   motor.linkSensor(&sensor);
+#endif
   motor.voltage_sensor_align = ALIGN_VOLTAGE;
   motor.controller = MotionControlType::torque;
   motor.target = 0;
@@ -202,11 +212,11 @@ void setup() {
   motor.torque_controller = TorqueControlType::foc_current;  // target in amps
   motor.current_limit = CURRENT_LIMIT;
   motor.voltage_limit = FOC_VOLTAGE_LIMIT;           // also the current PI output limit (set before motor.init)
-  // Current PI for a ~0.05 Ohm / tens-of-uH motor. SimpleFOC's defaults (P 3, I 300) are meant for ~10 Ohm
-  // gimbal motors and would oscillate here. Replace by measured values: "MFP0.4" measures R and L,
-  // then "MFC200" sets P = L*2pi*200, I = R*2pi*200 (200 Hz bandwidth).
-  motor.PID_current_q.P = motor.PID_current_d.P = 0.05f;
-  motor.PID_current_q.I = motor.PID_current_d.I = 50.0f;
+  // Current PI for a ~0.05 Ohm / tens-of-uH motor, measured with "MFP0.4" + "MFC200" (see board.h).
+  // SimpleFOC's defaults (P 3, I 300) are meant for ~10 Ohm gimbal motors and would oscillate here.
+  motor.PID_current_q.P = CURR_Q_P;
+  motor.PID_current_d.P = CURR_D_P;
+  motor.PID_current_q.I = motor.PID_current_d.I = CURR_I;
   current_sense.linkDriver(&driver);
   motor.init();
   ain::end();                                        // hand ADC2 back: SimpleFOC sets it up from scratch
