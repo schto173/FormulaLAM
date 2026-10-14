@@ -10,6 +10,8 @@
 #define ALIGN_VOLTAGE     0.4f    // V used to align the halls in step 4 (raise in 0.1 V steps if it does not move)
 #define VOLTAGE_LIMIT     0.5f    // V max applied to the motor in steps 3-5 (in step 5 this also caps the speed)
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
+#define FOC_VOLTAGE_LIMIT 1.0f    // V the current controller may apply in step 5 (caps the no-load speed at
+                                  // ~15 rad/s; change live with "MLU<volts>")
 
 // ---- motor temperature sensor (white wire, J8 pin 6) ------------------------------------------------
 // Type unknown so far: step 1 prints the sensor resistance and a guess. Set it here, then steps 3-5 show

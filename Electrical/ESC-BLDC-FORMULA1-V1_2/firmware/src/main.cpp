@@ -201,6 +201,12 @@ void setup() {
 #else
   motor.torque_controller = TorqueControlType::foc_current;  // target in amps
   motor.current_limit = CURRENT_LIMIT;
+  motor.voltage_limit = FOC_VOLTAGE_LIMIT;           // also the current PI output limit (set before motor.init)
+  // Current PI for a ~0.05 Ohm / tens-of-uH motor. SimpleFOC's defaults (P 3, I 300) are meant for ~10 Ohm
+  // gimbal motors and would oscillate here. Replace by measured values: "MFP0.4" measures R and L,
+  // then "MFC200" sets P = L*2pi*200, I = R*2pi*200 (200 Hz bandwidth).
+  motor.PID_current_q.P = motor.PID_current_d.P = 0.05f;
+  motor.PID_current_q.I = motor.PID_current_d.I = 50.0f;
   current_sense.linkDriver(&driver);
   motor.init();
   ain::end();                                        // hand ADC2 back: SimpleFOC sets it up from scratch

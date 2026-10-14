@@ -20,7 +20,11 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   - Step 3 ✓ (after a fix): first try only jerked – `driver.voltage_limit` was 0.5 V, so SimpleFOC centred the
     phases at 0.25 V (0–2 % duty, eaten by dead time). Now driver limit = Vbus, motor limit 0.5 V, MCU dead time
     100 ns → turns smoothly. Scope: clean 0–24 V square wave on all three phases.
-  - Next: step 4 (closed loop, halls). Steps 4–5 untested on hardware.
+  - Step 4 ✓: initFOC ok – `sensor dir: CCW`, `PP check: OK`, `Zero elec. angle: 3.14`. Voltage mode, no load:
+    T0.3 barely turns (cogging + dead time), T1.0 → 16 rad/s (KV 110 predicts ~11.5 → hall 60° steps probably
+    lead the voltage a bit; compare with the reverse speed). FET 28 °C, motor 22 °C.
+  - Step 5 prepared, untested: start current PI P 0.05 / I 50 (SimpleFOC defaults P 3 / I 300 are for ~10 Ω
+    gimbal motors), `FOC_VOLTAGE_LIMIT` 1 V; measure R/L with `MFP0.4`, then tune with `MFC200`.
 
 ## Folder
 | Path | What |

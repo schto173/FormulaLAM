@@ -31,7 +31,7 @@ Monitor**. Do them in order.
 | `2_hall_test` | connected, turn by hand | same | states 1–6 only, never 0 or 7; one wheel turn → pole pairs |
 | `3_open_loop` | connected | 20–24 V, limit ~1 A | motor turns slowly and smoothly. `T5` = faster, `T-5` = reverse, `T0` stop |
 | `4_closed_loop` | connected | same | alignment wiggle at start, then `T0.1` … `T0.5` (volts, capped at `VOLTAGE_LIMIT`) gives torque |
-| `5_foc_current` | connected | same, later the battery | `T0.5` … `T2` (amps) gives torque; current follows the target |
+| `5_foc_current` | connected | same, later the battery | first `MFP0.4` (measures R and L), then `MFC200` (sets the current PI); then `T0.5` … `T2` (amps) gives torque, `Iq` in the status line follows the target |
 
 **Supply voltage:** the 5 V regulator (LM5164) only switches on above **18 V** (EN/UVLO divider R63/R64,
 off again below 16.8 V). Below that the Nucleo stays dark, so always bring up at 20–24 V.
