@@ -62,14 +62,25 @@ void loop() {
 
 // ================================================================================================
 #elif STAGE == 2   // hall test, no PWM
-static volatile uint32_t transitions = 0;
+// Counts signed steps: the hall states follow the sequence 1-3-2-6-4-5 (seen on the 7070), so each change is
+// one step forward (+1) or back (-1). Wiggling the wheel by hand cancels out; only the net rotation remains.
+static volatile uint32_t transitions = 0, errors = 0;
+static volatile int32_t net = 0;
 static volatile uint8_t lastState = 0;
+static const int8_t ORDER[8] = {-1, 0, 2, 1, 4, 5, 3, -1};   // position of state s in 1-3-2-6-4-5, -1 = invalid
 static uint8_t hallState() {
   return (digitalRead(PIN_HALL_A) ? 1 : 0) | (digitalRead(PIN_HALL_B) ? 2 : 0) | (digitalRead(PIN_HALL_C) ? 4 : 0);
 }
 static void onHall() {
   uint8_t s = hallState();
-  if (s != lastState) { transitions++; lastState = s; }
+  if (s == lastState) return;
+  transitions++;
+  int8_t a = ORDER[lastState], b = ORDER[s];
+  int8_t d = (a < 0 || b < 0) ? 0 : (b - a + 6) % 6;
+  if (d == 1) net++;
+  else if (d == 5) net--;
+  else errors++;                                   // invalid state or a skipped step
+  lastState = s;
 }
 
 void setup() {
@@ -83,13 +94,16 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_HALL_B), onHall, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_HALL_C), onHall, CHANGE);
   Serial.println("Good: states 1..6 only, each change moves to a neighbour, 0 and 7 never appear.");
-  Serial.println("Turn the wheel exactly ONE turn, then type 'r' to reset the counter before the next try.");
-  Serial.println("pole pairs = transitions per turn / 6");
+  Serial.println("Type 'r' + Enter to reset, then turn the wheel exactly ONE turn (wiggling back and forth is fine).");
+  Serial.println("pole pairs = net steps per turn / 6");
 }
 
 void loop() {
   blink();
-  if (Serial.available() && Serial.read() == 'r') { transitions = 0; Serial.println("counter reset"); }
+  if (Serial.available() && Serial.read() == 'r') {
+    noInterrupts(); transitions = 0; net = 0; errors = 0; interrupts();
+    Serial.println("counter reset");
+  }
   static uint8_t shown = 0xFF;
   uint8_t s = hallState();
   if (s != shown) {
@@ -98,8 +112,11 @@ void loop() {
     Serial.print("  (A B C = "); Serial.print(s & 1); Serial.print(' '); Serial.print((s >> 1) & 1);
     Serial.print(' '); Serial.print((s >> 2) & 1); Serial.print(")");
     if (s == 0 || s == 7) Serial.print("  <-- INVALID: check hall wiring / supply");
-    Serial.print("  transitions "); Serial.print(transitions);
-    Serial.print("  -> pole pairs if this was one turn: "); Serial.println(transitions / 6.0f, 1);
+    int32_t n = net;
+    Serial.print("  net steps "); Serial.print(n);
+    Serial.print("  -> pole pairs if this was one turn: "); Serial.print(abs(n) / 6.0f, 2);
+    Serial.print("  (all changes "); Serial.print(transitions);
+    Serial.print(", errors "); Serial.print(errors); Serial.println(")");
   }
 }
 

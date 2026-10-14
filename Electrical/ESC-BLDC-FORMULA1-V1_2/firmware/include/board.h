@@ -18,7 +18,7 @@
 #define MOTOR_TEMP_NTC10K  1
 #define MOTOR_TEMP_KTY84   2
 #define MOTOR_TEMP_PT1000  3
-#define MOTOR_TEMP_SENSOR  MOTOR_TEMP_UNKNOWN
+#define MOTOR_TEMP_SENSOR  MOTOR_TEMP_NTC10K   // measured 11.85 kOhm at ~21 C room temperature (2026-10-14)
 #define MOTOR_NTC_BETA     3950.0f // only for NTC10K; 3950 is the usual motor NTC (check the motor's spec)
 
 // ---- temperature protection (steps 3-5): full power below WARN, linear derating, motor stops at MAX ----

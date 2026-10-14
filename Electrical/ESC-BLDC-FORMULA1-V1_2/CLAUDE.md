@@ -14,7 +14,10 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     (calculated 18.0 V). With Nucleo (ST-LINK V3) ~0.1 A at 24 V. Green LED D3 on.
   - Step 1 ✓: all DRV8353 registers read back ok, no faults, Vbus reads 23.3 V (not yet checked against a
     multimeter), FET 22–23 °C, motor sensor open (motor not connected yet).
-  - Next: step 2 (hall test) with the motor connected. Steps 2–5 untested on hardware.
+  - Motor temperature sensor = **NTC 10k** (11.85 kΩ at ~21 °C), `MOTOR_TEMP_SENSOR` set (B3950 assumed).
+  - Step 2 ✓: all 6 hall states, never 0/7, no skipped steps; sequence 1-3-2-6-4-5; **42 net steps per turn →
+    7 pole pairs confirmed**. The hall test now counts signed steps (hand wiggle cancels out).
+  - Next: step 3 (open loop) – needs the phase wires soldered to J6. Steps 3–5 untested on hardware.
 
 ## Folder
 | Path | What |
