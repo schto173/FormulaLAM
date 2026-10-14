@@ -41,6 +41,10 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     6.35 V @ 137 rad/s → **Ke = 0.046 V/(rad/s) phase peak → KV ≈ 120 rpm/V** (datasheet 110; KV is line-line,
     i.e. √3 × phase – rough "110 rpm per volt of Uq" estimates earlier were off by that factor).
     Max no-load speed ≈ Uq / 0.046: SinePWM Uq ≤ Vbus/2, SVPWM ≤ Vbus/√3 (58 V → ~700 rad/s ≈ 6700 rpm).
+  - SpaceVectorPWM on (`USE_SVPWM`), `MLU` capped at 0.55 × Vbus. 30 V, `MLU16`: **363 ± 2 rad/s ≈ 3450 rpm**,
+    35 s at full throttle: FET 27.0 °C flat, motor 23.4 → 24.5 °C. Iq at top speed averages ~0.55 A
+    (≈ 13 W no-load loss) but scatters −1.2 … +1.9 A: at 93 % modulation the highest phase gets only ~1.7 µs
+    low-side time per PWM period, too short for a clean shunt reading (with SinePWM at MLU12: ±0.1 A).
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
     load, higher speeds (`MLU` > 2), long runs / temperatures.
 
@@ -126,6 +130,9 @@ very low → current ripple; try 20 / 30 / 40 kHz PWM and compare battery curren
    (SimpleFOCDrivers) for the halls; `sensor.velocity_max ≈ 800` rad/s; hard-code `zero_electric_angle` and
    `sensor_direction` after the first run so the car starts without the alignment wiggle.
 6. Protocol to the Pi (USB serial now, CAN/FDCAN2 later).
+7. Current sensing at high modulation (burns at 4500–5000 rpm run near full output): per PWM period skip the
+   phase with the highest duty (shortest low-side window) and compute it from the other two (ia+ib+ic = 0).
+   SimpleFOC 2.4.0 always uses all three. Alternatives: lower PWM frequency, or a lower `MLU_MAX_FRACTION`.
 
 ## Ideas for board V2 (known weak spots of V1.2)
 - GND stitching vias are sparse (median ~10 mm, worst 42 mm in the empty area under the Nucleo) → add a 8–10 mm grid.
