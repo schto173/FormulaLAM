@@ -17,7 +17,10 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   - Motor temperature sensor = **NTC 10k** (11.85 kΩ at ~21 °C), `MOTOR_TEMP_SENSOR` set (B3950 assumed).
   - Step 2 ✓: all 6 hall states, never 0/7, no skipped steps; sequence 1-3-2-6-4-5; **42 net steps per turn →
     7 pole pairs confirmed**. The hall test now counts signed steps (hand wiggle cancels out).
-  - Next: step 3 (open loop) – needs the phase wires soldered to J6. Steps 3–5 untested on hardware.
+  - Step 3 ✓ (after a fix): first try only jerked – `driver.voltage_limit` was 0.5 V, so SimpleFOC centred the
+    phases at 0.25 V (0–2 % duty, eaten by dead time). Now driver limit = Vbus, motor limit 0.5 V, MCU dead time
+    100 ns → turns smoothly. Scope: clean 0–24 V square wave on all three phases.
+  - Next: step 4 (closed loop, halls). Steps 4–5 untested on hardware.
 
 ## Folder
 | Path | What |
