@@ -4,8 +4,11 @@
 
 // ---- motor: SET THESE FOR YOUR MOTOR ------------------------------------------------------------
 #define POLE_PAIRS        7       // step 2 (hall test) tells you the real value
-#define ALIGN_VOLTAGE     1.5f    // V used to align the halls in step 4 (raise slowly if it does not move)
-#define VOLTAGE_LIMIT     3.0f    // V max applied to the motor in steps 3-4 (start low!)
+// The 7070 has only ~0.054 Ohm + ~0.01 Ohm FET/shunt/wire, and at standstill nothing but that resistance
+// limits the current: 0.5 V ~ 8-10 A in the windings, 3 V would be ~50 A and collapse a current-limited
+// bench supply below the 16.8 V UVLO of the 5 V regulator (Nucleo resets).
+#define ALIGN_VOLTAGE     0.4f    // V used to align the halls in step 4 (raise in 0.1 V steps if it does not move)
+#define VOLTAGE_LIMIT     0.5f    // V max applied to the motor in steps 3-5 (in step 5 this also caps the speed)
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
 
 // ---- motor temperature sensor (white wire, J8 pin 6) ------------------------------------------------
@@ -40,9 +43,9 @@
 #define PIN_DRV_CS     PB11       // DRV nSCS
 
 // ---- current sense: DRV8353 amplifiers on 2 mOhm shunts, all on ADC2 ------------------------------
-#define PIN_SOA    PA0
-#define PIN_SOB    PA1
-#define PIN_SOC    PA4
+#define PIN_SOA    PA4            // SOA -> R57 -> PA4 (CN7_32)  note: A and C are NOT in pin order
+#define PIN_SOB    PA1            // SOB -> R56 -> PA1 (CN7_30)
+#define PIN_SOC    PA0            // SOC -> R55 -> PA0 (CN7_28)
 #define SHUNT_OHMS 0.002f
 #define CSA_GAIN   20.0f          // must match the CSA_GAIN written in drv8353.h
 

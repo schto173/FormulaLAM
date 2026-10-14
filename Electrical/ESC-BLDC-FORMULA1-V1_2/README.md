@@ -42,7 +42,7 @@ modules only – the 5 V rail is 1 A in total and also feeds the Nucleo and the 
 | 6-PWM (A_H, A_L, B_H, B_L, C_H, C_L) + enable | `BLDCDriver6PWM(PA10, PB15, PA9, PB14, PA8, PB13, PA11)` |
 | DRV8353 SPI | SCK PB3, MISO PB4 (SDO), MOSI PB5 (SDI), CS PB11 |
 | DRV8353 nFAULT | PB10 |
-| Current sense SOA / SOB / SOC | PA0 / PA1 / PA4 (all on ADC2) |
+| Current sense SOA / SOB / SOC | PA4 / PA1 / PA0 (all on ADC2; SOA is on PA4, SOC on PA0) |
 | Voltage sense A / B / C / bus | PB0 / PC0 / PC2 / PC3 (divider 383 k / 9.76 k) |
 | Halls A / B / C | PB2 / PB1 / PC4 |
 | Throttle | PC1 |

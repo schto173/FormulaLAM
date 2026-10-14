@@ -9,7 +9,8 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
 - JLC's production file was compared with ours: identical except etch compensation (traces +0.03 mm inner /
   +0.065 mm outer), non-functional inner-layer pads removed, plated holes drilled +0.15 mm, panel with 5 mm rails
   on the top/bottom edges (V-score exactly on the board edges), QR code + tooling holes on the rails.
-- **Not received / not powered yet. Firmware compiles (all 5 bring-up steps) but is untested on hardware.**
+- **Boards received (2026-10-14), not powered yet.** Next: step 0 (rails without the Nucleo) in `firmware/README.md`.
+  Firmware compiles (all 5 bring-up steps) but is untested on hardware.
 
 ## Folder
 | Path | What |
@@ -31,7 +32,8 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
 - DRV8353 integrated buck → VBUCK 12.1 V / 318 kHz → feeds only the DRV's VM pin (gate-drive supply).
   Both converters were re-verified against the TI datasheets on 2026-10-07.
 - Current sense: 2 mΩ shunts (R14/R15/R16, Kelvin via net ties NT1–3), CSA gain 20 V/V, bidirectional around
-  VREF/2 = 1.65 V → ±30 A ≈ 0.45…2.85 V. SOA/SOB/SOC on PA0/PA1/PA4, all ADC2.
+  VREF/2 = 1.65 V → ±30 A ≈ 0.45…2.85 V. SOA/SOB/SOC on **PA4/PA1/PA0** (A and C crossed vs. pin order;
+  firmware had them swapped until 2026-10-14), all ADC2.
 - Temperatures: FET NTC TH1 (10k B3380, next to Q4) → 10k pull-up → **PA6**. Motor sensor (J8 pin 6, white wire) →
   2.2k pull-up, 1k series, 100 nF → **PA7**. Motor sensor type is unknown: at room temperature ~10 kΩ = NTC 10k,
   ~600 Ω = KTY84, ~1 kΩ = PT1000 (the 2.2k pull-up works for all three).
@@ -65,6 +67,9 @@ very low → current ripple; try 20 / 30 / 40 kHz PWM and compare battery curren
   does not compile on core 3.0. `workspace_dir` is moved under `~/.platformio/ws/esc-hat` because the project path
   plus SimpleFOC's nested includes exceed the 260-char Windows path limit.
 - Environments `1_drv_check` … `5_foc_current` select the step via `-D STAGE=n` (see `firmware/README.md`).
+  `pio run` alone builds only `1_drv_check` (default_envs); build all with `-e 1_drv_check -e 2_hall_test …`.
+- If the VS Code PlatformIO extension fails to install Core (pip → PyPI "PermissionError 13"), install it from a
+  normal terminal into the extension's venv: `%USERPROFILE%\.platformio\penv\Scripts\python.exe -m pip install -U platformio`.
 - EN (PA11) is driven by our code, not given to SimpleFOC: EN low puts the DRV8353 to sleep and resets its registers.
 - DRV8353 registers written at start (`include/drv8353.h`, SPI mode 1, 16-bit): GATE_HS 0x333 / GATE_LS 0x733
   (IDRIVE 150 mA source / 300 mA sink instead of the very hard 1000/2000 mA default), OCP 0x157 (100 ns dead time,

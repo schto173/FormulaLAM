@@ -7,6 +7,20 @@
    toolchain and SimpleFOC by itself the first time (a few minutes).
 4. Nucleo: jumper **JP5 on E5V**, plug it onto the ESC board, USB cable to the PC.
 
+## Step 0: first power-up, no Nucleo, no motor (no firmware needed)
+1. Look the board over: solder bridges on U1 (DRV8353, QFN), U4, the FETs; all parts there, polarised parts
+   the right way round (D8, the two 330 µF caps).
+2. Multimeter, supply **off**: no short from BAT+ (fuse side) to GND, +5 V (J9 pin 1) to GND, and each phase pad
+   to GND and to BAT+. Readings that start low and climb are just the capacitors charging; that is fine.
+3. Bench supply **24 V, current limit 0.1 A**, fuse in F1, Nucleo **not** plugged in. Switch on and watch the
+   current: it should settle at a few mA to a few tens of mA. If it sits at the limit, switch off.
+4. Measure (black probe on J9 pin 4 = GND):
+   - **5.0 V** on J9 pin 1 (LM5164, for the Nucleo)
+   - **12.1 V** across C24 (DRV8353 buck = gate-drive supply)
+5. Optional: turn the supply down slowly. 5 V should drop out at about 16.8 V and come back at about 18 V.
+6. Switch off, set Nucleo jumper **JP5 to E5V**, plug the Nucleo in (USB towards the left board edge),
+   switch on again: the green LED D3 (3.3 V) lights. Then plug in USB and go to step 1.
+
 ## Steps
 Pick the environment at the bottom of VS Code (or in the PlatformIO sidebar), click **Upload and
 Monitor**. Do them in order.
@@ -16,7 +30,7 @@ Monitor**. Do them in order.
 | `1_drv_check` | not needed | bench supply **20–24 V**, current limit 0.3 A | all settings `ok`, "SPI OK", no faults, plausible bus voltage, FET temperature, motor sensor resistance + type guess |
 | `2_hall_test` | connected, turn by hand | same | states 1–6 only, never 0 or 7; one wheel turn → pole pairs |
 | `3_open_loop` | connected | 20–24 V, limit ~1 A | motor turns slowly and smoothly. `T5` = faster, `T-5` = reverse, `T0` stop |
-| `4_closed_loop` | connected | same | alignment wiggle at start, then `T0.5` … `T2` (volts) gives torque |
+| `4_closed_loop` | connected | same | alignment wiggle at start, then `T0.1` … `T0.5` (volts, capped at `VOLTAGE_LIMIT`) gives torque |
 | `5_foc_current` | connected | same, later the battery | `T0.5` … `T2` (amps) gives torque; current follows the target |
 
 **Supply voltage:** the 5 V regulator (LM5164) only switches on above **18 V** (EN/UVLO divider R63/R64,
