@@ -132,6 +132,13 @@ void doA() { sensor.handleA(); }
 void doB() { sensor.handleB(); }
 void doC() { sensor.handleC(); }
 void doTarget(char *cmd) { command.scalar(&motor.target, cmd); }
+// "L<value>": limit before temperature derating - volts in steps 3-4, amps in step 5. Capped for the bench.
+#if STAGE == 5
+static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = 15.0f;
+#else
+static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
+#endif
+void doLimit(char *cmd) { float v = limitBase; command.scalar(&v, cmd); limitBase = constrain(v, 0.0f, LIMIT_CAP); }
 void doMotor(char *cmd)  { command.motor(&motor, cmd); }
 
 static bool pwmReady = false;
@@ -163,9 +170,13 @@ void setup() {
   if (!drv::begin(Serial)) halt("DRV8353 does not answer on SPI - run step 1");
 
   driver.voltage_power_supply = vbus;
-  driver.voltage_limit = VOLTAGE_LIMIT;
+  // NOT the motor limit: SimpleFOC centres the phase voltages at driver.voltage_limit / 2. With 0.5 V here the
+  // phases swung 0..0.5 V (0-2 % duty, <1 us pulses eaten by the dead time) and the motor only jerked.
+  driver.voltage_limit = vbus;                       // phases centred at Vbus/2; the motor limit is below
   driver.pwm_frequency = 20000;
-  driver.dead_zone = 0.01f;                          // 500 ns at 20 kHz, on top of the DRV's 100 ns
+  // 100 ns at 20 kHz, plus the DRV's own 100 ns dead time and VGS handshake (it never turns on both FETs of a
+  // phase). Every ns of dead time costs voltage: 600 ns total was ~0.3 V of the 0.5 V we apply.
+  driver.dead_zone = 0.002f;
   if (!driver.init()) halt("PWM driver init failed");
   motor.linkDriver(&driver);
   pwmReady = true;
@@ -201,11 +212,13 @@ void setup() {
 #endif
 
   command.add('T', doTarget, "target");
+  command.add('L', doLimit, "limit (V in steps 3-4, A in step 5)");
   command.add('M', doMotor, "motor");
   motor.useMonitoring(Serial);
-  motor.monitor_downsample = 200;
-  motor.monitor_variables = _MON_TARGET | _MON_VEL | _MON_VOLT_Q | _MON_CURR_Q;
+  motor.monitor_downsample = 0;                      // off: it floods the terminal (hundreds of lines/s).
+  motor.monitor_variables = _MON_TARGET | _MON_VEL | _MON_VOLT_Q | _MON_CURR_Q;   // "MMD500" switches it on
   Serial.println("ready. T<value> sets the target, M for all motor commands (e.g. MVP0.2 velocity P gain).");
+  Serial.println("status every second: # target | speed | Uq | Iq | FET | motor | Vbus | power");
 }
 
 // Temperatures every 200 ms: full power below *_WARN, linear derating up to *_MAX, stop at *_MAX.
@@ -221,17 +234,24 @@ static void temperatureTask() {
 #endif
   if (k <= 0.0f) halt("over-temperature");
 #if STAGE == 5
-  float lim = CURRENT_LIMIT * k;                     // A
+  float lim = limitBase * k;                         // A
   motor.current_limit = lim;
 #else
-  float lim = VOLTAGE_LIMIT * k;                     // V
+  float lim = limitBase * k;                         // V
   motor.voltage_limit = lim;
 #endif
   motor.PID_velocity.limit = lim;                    // velocity mode (MC1): its output is the torque command
   if (motor.controller == MotionControlType::torque) motor.target = constrain(motor.target, -lim, lim);
   if (millis() - tp >= 1000) {
     tp = millis();
-    Serial.print("# FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
+    Serial.print("# target "); Serial.print(motor.target, 2);
+    Serial.print(" | speed "); Serial.print(motor.shaft_velocity, 1); Serial.print(" rad/s");
+    Serial.print(" | Uq "); Serial.print(motor.voltage.q, 2); Serial.print(" V");
+    Serial.print(" | limit "); Serial.print(lim, 2);
+#if STAGE == 5
+    Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");
+#endif
+    Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
     if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
     else { Serial.print(tm, 1); Serial.print(" C"); }
     Serial.print(" | Vbus "); Serial.print(ain::busVolts(), 1); Serial.print(" V | power "); Serial.print(k * 100.0f, 0);
