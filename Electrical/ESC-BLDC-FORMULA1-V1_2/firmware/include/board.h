@@ -60,11 +60,4 @@
 #define PIN_LED    PB7
 
 #define VBUS_DIVIDER ((383.0f + 9.76f) / 9.76f)
-
-// Uses analogRead(): only call BEFORE ain::begin() (see analog_in.h - analogRead() resets ADC1+ADC2).
-inline float readBusVoltage() {
-  analogReadResolution(12);
-  float v = 0;
-  for (int i = 0; i < 16; i++) v += analogRead(PIN_VBUS);
-  return v / 16.0f / 4095.0f * 3.3f * VBUS_DIVIDER;
-}
+// Bus voltage, temperatures and throttle: read with ain::... from analog_in.h, never with analogRead().

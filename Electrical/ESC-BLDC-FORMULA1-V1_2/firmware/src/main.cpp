@@ -32,8 +32,8 @@ void setup() {
   delay(1500);
   pinMode(PIN_LED, OUTPUT);
   banner("DRV8353 check");
-  Serial.print("bus voltage: "); Serial.print(readBusVoltage(), 1); Serial.println(" V");
   if (!ain::begin(false)) Serial.println("ADC2 init FAILED");
+  Serial.print("bus voltage: "); Serial.print(ain::busVolts(), 1); Serial.println(" V");
   bool ok = drv::begin(Serial);
   Serial.println(ok ? "SPI OK - the DRV8353 is alive and configured"
                     : "SPI FAILED - check the supply, EN (PA11) and the SPI wiring");
@@ -139,9 +139,10 @@ void setup() {
   banner("FOC with current sensing");
 #endif
 
-  float vbus = readBusVoltage();                     // before current sensing takes over the ADC
+  if (!ain::begin(false)) halt("ADC2 init failed");
+  float vbus = ain::busVolts();
   Serial.print("bus voltage: "); Serial.print(vbus, 1); Serial.println(" V");
-  if (vbus < 9.0f) halt("bus voltage below 9 V (DRV8353 minimum) - check the supply");
+  if (!(vbus >= 9.0f)) halt("bus voltage below 9 V (DRV8353 minimum) - check the supply");
   if (!drv::begin(Serial)) halt("DRV8353 does not answer on SPI - run step 1");
 
   driver.voltage_power_supply = vbus;
@@ -158,7 +159,6 @@ void setup() {
   motor.controller = MotionControlType::velocity_openloop;
   motor.target = 2;                                  // rad/s, change with T
   motor.init();
-  if (!ain::begin(false)) halt("ADC2 init failed");
 #else
   sensor.pullup = Pullup::USE_EXTERN;
   sensor.init();
@@ -170,12 +170,12 @@ void setup() {
 #if STAGE == 4
   motor.torque_controller = TorqueControlType::voltage;   // target in volts
   motor.init();
-  if (!ain::begin(false)) halt("ADC2 init failed");
 #else
   motor.torque_controller = TorqueControlType::foc_current;  // target in amps
   motor.current_limit = CURRENT_LIMIT;
   current_sense.linkDriver(&driver);
   motor.init();
+  ain::end();                                        // hand ADC2 back: SimpleFOC sets it up from scratch
   if (!current_sense.init()) halt("current sense init failed");
   motor.linkCurrentSense(&current_sense);
   if (!ain::begin(true)) halt("ADC2 not running after current sense init");   // from here on: no analogRead()!

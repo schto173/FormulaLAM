@@ -21,7 +21,8 @@ static const uint32_t CH_VBUS     = LL_ADC_CHANNEL_9;
 
 static bool ready = false;
 
-// simplefocOwnsAdc2 = false: steps without current sensing -> configure ADC2 ourselves.
+// simplefocOwnsAdc2 = false: configure ADC2 ourselves (every step at start-up; in step 5 call end() before
+//                            current_sense.init(), so SimpleFOC finds ADC2 switched off and sets it up itself).
 // simplefocOwnsAdc2 = true : call AFTER current_sense.init(); ADC2 is already configured and enabled by SimpleFOC.
 inline bool begin(bool simplefocOwnsAdc2) {
   pinMode(PIN_NTC, INPUT_ANALOG); pinMode(PIN_MOT_TEMP, INPUT_ANALOG);
@@ -47,6 +48,7 @@ inline bool begin(bool simplefocOwnsAdc2) {
     h.Init.OversamplingMode = DISABLE;
     if (HAL_ADC_Init(&h) != HAL_OK) return false;
     HAL_ADCEx_Calibration_Start(&h, ADC_SINGLE_ENDED);
+    LL_ADC_ClearFlag_ADRDY(ADC2);
     LL_ADC_Enable(ADC2);
     uint32_t t0 = millis();
     while (!LL_ADC_IsActiveFlag_ADRDY(ADC2)) if (millis() - t0 > 10) return false;
@@ -54,6 +56,18 @@ inline bool begin(bool simplefocOwnsAdc2) {
   if (!LL_ADC_IsEnabled(ADC2)) return false;
   ready = true;
   return true;
+}
+
+// switch ADC2 off again after begin(false) (step 5: right before current_sense.init())
+inline void end() {
+  ready = false;
+  if (!LL_ADC_IsEnabled(ADC2)) return;
+  if (LL_ADC_REG_IsConversionOngoing(ADC2)) LL_ADC_REG_StopConversion(ADC2);
+  uint32_t t0 = millis();
+  while (LL_ADC_REG_IsStopConversionOngoing(ADC2) && millis() - t0 < 10) {}
+  LL_ADC_Disable(ADC2);
+  while (LL_ADC_IsEnabled(ADC2) && millis() - t0 < 10) {}
+  LL_ADC_ClearFlag_ADRDY(ADC2);
 }
 
 // one regular conversion on ADC2, 12 bit; 0xFFFF on timeout

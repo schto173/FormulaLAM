@@ -9,8 +9,12 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
 - JLC's production file was compared with ours: identical except etch compensation (traces +0.03 mm inner /
   +0.065 mm outer), non-functional inner-layer pads removed, plated holes drilled +0.15 mm, panel with 5 mm rails
   on the top/bottom edges (V-score exactly on the board edges), QR code + tooling holes on the rails.
-- **Boards received (2026-10-14), not powered yet.** Next: step 0 (rails without the Nucleo) in `firmware/README.md`.
-  Firmware compiles (all 5 bring-up steps) but is untested on hardware.
+- **Boards received 2026-10-14. Bring-up board #1 (bench supply 24 V):**
+  - Step 0 ✓: 5 V = 4.977 V (J9.1), VBUCK = 12.072 V (L1); 5 V came on at ~16 V on the supply's display
+    (calculated 18.0 V). With Nucleo (ST-LINK V3) ~0.1 A at 24 V. Green LED D3 on.
+  - Step 1 ✓: all DRV8353 registers read back ok, no faults, Vbus reads 23.3 V (not yet checked against a
+    multimeter), FET 22–23 °C, motor sensor open (motor not connected yet).
+  - Next: step 2 (hall test) with the motor connected. Steps 2–5 untested on hardware.
 
 ## Folder
 | Path | What |
@@ -78,7 +82,9 @@ very low → current ripple; try 20 / 30 / 40 kHz PWM and compare battery curren
   after each `analogRead()` and force-resets ADC1+ADC2 together (shared ADC12 reset/clock), wiping SimpleFOC's
   injected setup on ADC2. All slow analog inputs go through `include/analog_in.h` instead: register-level single
   conversions on ADC2's free regular group (PA6 = IN3 FET NTC, PA7 = IN4 motor sensor, PC1 = IN7 throttle,
-  PC3 = IN9 bus voltage). `readBusVoltage()` (analogRead) is only used once at start-up, before `ain::begin()`.
+  PC3 = IN9 bus voltage). No `analogRead()` anywhere: on the real board `analogRead(PC3)` returned 0 V (the
+  ADC2 reading gave 23.3 V), so every step starts with `ain::begin(false)` + `ain::busVolts()`; step 5 calls
+  `ain::end()` before `current_sense.init()` and `ain::begin(true)` after it.
 - Temperature protection (steps 3–5, `temperatureTask()` in main.cpp): every 200 ms; full power below
   FET 80 °C / motor 90 °C, linear derating, stop at 100 °C / 110 °C (motor only once `MOTOR_TEMP_SENSOR` is set).
 
