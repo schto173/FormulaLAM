@@ -43,6 +43,8 @@ Throttle on J7 (1 = 3.3 V, 2 = signal, 3 = GND). It sets the motor current: 0–
 `CURRENT_LIMIT` 5 A). It is on after start-up (`THROTTLE_ON_AT_START`) but only acts after it has been released
 once ("armed"); the current rises at most 10 A/s and drops at once when released. Commands: `A` status,
 `AI` idle = now (released), `AF` full = now (pressed fully), `A0` off (T commands work again), `A1` on.
+The voltage cap is automatic (0.55 × Vbus, i.e. full speed for the current battery voltage); `MLU<volts>` sets a
+lower manual cap for tests, `MLU0` goes back to automatic. The status line shows it as `Umax … auto/man`.
 Put the calibrated volts into `THROTTLE_IDLE_V` / `THROTTLE_FULL_V` in `include/board.h`.
 
 ## Bus protection (steps 3–5)

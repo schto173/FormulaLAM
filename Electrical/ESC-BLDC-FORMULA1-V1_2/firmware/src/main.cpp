@@ -145,7 +145,29 @@ static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = 15.0f;
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
 void doLimit(char *cmd) { float v = limitBase; command.scalar(&v, cmd); limitBase = constrain(v, 0.0f, LIMIT_CAP); }
+#if STAGE == 5
+// Step 5 voltage cap: automatic = MLU_MAX_FRACTION x Vbus (follows the battery), or a manual lower cap for tests.
+static float mluManual = NAN;                        // NAN = automatic
+#endif
 void doMotor(char *cmd) {
+#if STAGE == 5
+  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2]) {    // "MLU<volts>" manual cap, "MLU0" automatic
+    float v = atof(cmd + 2), vmax = MLU_MAX_FRACTION * driver.voltage_power_supply;
+    if (v <= 0.0f) { mluManual = NAN; Serial.println("voltage cap: automatic (0.55 x Vbus)"); return; }
+    if (v > vmax) {
+      Serial.print("refused: max is "); Serial.print(vmax, 1);
+      Serial.println(" V at this bus voltage - MLU0 = automatic, always the max");
+      return;
+    }
+    if (v < motor.voltage_limit && fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
+      Serial.println("refused: lowering MLU while spinning brakes into the supply - release, wait until it stops");
+      return;
+    }
+    mluManual = v; motor.updateVoltageLimit(v);
+    Serial.print("voltage cap: manual "); Serial.print(v, 1); Serial.println(" V (MLU0 = automatic)");
+    return;
+  }
+#endif
   // lowering the voltage limit below the back-EMF while spinning brakes regeneratively (see BUS_OV_LIMIT)
   if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2] && atof(cmd + 2) < motor.voltage_limit &&
       fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
@@ -385,6 +407,10 @@ static void temperatureTask() {
 #if STAGE == 5
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;
+  if (vb > 9.0f) {                                   // voltage cap: automatic or the manual one, never above the max
+    float umax = MLU_MAX_FRACTION * vb, u = isnan(mluManual) ? umax : min(mluManual, umax);
+    if (fabsf(u - motor.voltage_limit) > 0.05f) motor.updateVoltageLimit(u);
+  }
 #else
   float lim = limitBase * k;                         // V
   motor.voltage_limit = lim;
@@ -397,6 +423,9 @@ static void temperatureTask() {
     Serial.print(" | speed "); Serial.print(motor.shaft_velocity, 1); Serial.print(" rad/s");
     Serial.print(" | Uq "); Serial.print(motor.voltage.q, 2); Serial.print(" V");
     Serial.print(" | limit "); Serial.print(lim, 2);
+#if STAGE == 5
+    Serial.print(" | Umax "); Serial.print(motor.voltage_limit, 1); Serial.print(isnan(mluManual) ? " auto" : " man");
+#endif
 #if STAGE == 5
     Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");
     if (thrOn) { Serial.print(" | thr "); Serial.print(thrArmed ? "" : "(not armed) "); Serial.print(thrPct, 0); Serial.print(" %"); }

@@ -10,8 +10,8 @@
 #define ALIGN_VOLTAGE     0.4f    // V used to align the halls in step 4 (raise in 0.1 V steps if it does not move)
 #define VOLTAGE_LIMIT     0.5f    // V max applied to the motor in steps 3-5 (in step 5 this also caps the speed)
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
-#define FOC_VOLTAGE_LIMIT 1.0f    // V the current controller may apply in step 5 (caps the no-load speed at
-                                  // ~15 rad/s; change live with "MLU<volts>")
+#define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 only during start-up; afterwards automatic = MLU_MAX_FRACTION x Vbus
+                                  // ("MLU<volts>" = lower manual cap for tests, "MLU0" = automatic again)
 // SpaceVectorPWM: max phase voltage Vbus/sqrt(3) instead of Vbus/2 (+15.5 %): 5000 rpm needs ~26 V per phase
 // -> SinePWM only above ~52 V bus, SVPWM above ~45 V (most of a 14S battery). Same switching losses.
 #define USE_SVPWM         1
