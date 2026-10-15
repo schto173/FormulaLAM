@@ -240,6 +240,25 @@ static void throttleTask() {
   thrTarget = (want > thrTarget) ? min(want, thrTarget + THROTTLE_RAMP_A_S * dt) : want;
   motor.target = thrTarget;
 }
+
+// Quiet standstill: throttle released and the motor (almost) stopped -> DRV8353 COAST bit = all six FETs off.
+// Holding 0 A with the FETs switching made the motor hiss (louder on the 45 V pack). Only at standstill for
+// now: re-engaging while spinning needs the back-EMF voltage preloaded first (TODO), at standstill there is none.
+// PWM and the current loop keep running underneath, so leaving COAST is immediate.
+static bool coasting = false;
+static void setCoast(bool on) {
+  if (on == coasting) return;
+  coasting = on;
+  if (!on) { motor.PID_current_q.reset(); motor.PID_current_d.reset(); }
+  drv::write(drv::DRV_CTRL, on ? 0x004 : 0x000);     // DRV_CTRL bit 2 = COAST, 6x PWM mode otherwise
+}
+static void coastTask() {
+  float v = fabsf(motor.shaft_velocity);
+  bool released = !thrOn || thrTarget <= 0.0f;
+  if (!thrOn) { setCoast(false); return; }            // T commands: behave as before
+  if (released && v < 1.0f) setCoast(true);
+  else if (!released || v > 5.0f) setCoast(false);   // hysteresis: a push by hand alone doesn't toggle it
+}
 #endif
 
 void setup() {
@@ -381,6 +400,7 @@ static void temperatureTask() {
 #if STAGE == 5
     Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");
     if (thrOn) { Serial.print(" | thr "); Serial.print(thrArmed ? "" : "(not armed) "); Serial.print(thrPct, 0); Serial.print(" %"); }
+    if (coasting) Serial.print(" COAST");
 #endif
     Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
     if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
@@ -397,6 +417,7 @@ void loop() {
   motor.monitor();
 #if STAGE == 5
   throttleTask();
+  coastTask();
 #endif
   noRegenTask();
   busTask();
