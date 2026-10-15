@@ -122,7 +122,21 @@ void loop() {
 
 // ================================================================================================
 #else   // steps 3-5: SimpleFOC
-BLDCMotor motor = BLDCMotor(POLE_PAIRS);
+// Total voltage limit: SimpleFOC limits Uq and Ud each to the cap, so together they could reach 1.41 x the cap
+// and clip the PWM - then the low-side shunts can't measure and the current loop works blind. Here Ud is
+// limited first and Uq gets what is left, so |U| never exceeds the cap.
+class CappedMotor : public BLDCMotor {
+ public:
+  using BLDCMotor::BLDCMotor;
+  void setPhaseVoltage(float Uq, float Ud, float angle_el) override {
+    float lim = voltage_limit;
+    Ud = _constrain(Ud, -lim, lim);
+    float qmax = sqrtf(max(lim * lim - Ud * Ud, 0.0f));
+    Uq = _constrain(Uq, -qmax, qmax);
+    BLDCMotor::setPhaseVoltage(Uq, Ud, angle_el);
+  }
+};
+CappedMotor motor = CappedMotor(POLE_PAIRS);
 BLDCDriver6PWM driver = BLDCDriver6PWM(PIN_INHA, PIN_INLA, PIN_INHB, PIN_INLB, PIN_INHC, PIN_INLC);  // EN is ours
 HallSensor sensor = HallSensor(PIN_HALL_A, PIN_HALL_B, PIN_HALL_C, POLE_PAIRS);
 #if HALL_SMOOTHING
@@ -140,13 +154,16 @@ void doC() { sensor.handleC(); }
 void doTarget(char *cmd) { command.scalar(&motor.target, cmd); }
 // "L<value>": limit before temperature derating - volts in steps 3-4, amps in step 5. Capped for the bench.
 #if STAGE == 5
-static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = 15.0f;
+static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_LIMIT;   // hard max
 #else
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
 void doLimit(char *cmd) { float v = limitBase; command.scalar(&v, cmd); limitBase = constrain(v, 0.0f, LIMIT_CAP); }
+#if STAGE == 5
+static float mluLimit = FOC_VOLTAGE_MAX;             // "MLU<volts>" lowers the voltage cap for a test
+#endif
 void doMotor(char *cmd) {
-  // "MLU<volts>": lower the fixed voltage cap for a test; never above FOC_VOLTAGE_MAX
+  // "MLU<volts>": lower the voltage cap for a test; never above FOC_VOLTAGE_MAX
   if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2]) {
     float v = atof(cmd + 2);
     if (!(v > 0.0f && v <= FOC_VOLTAGE_MAX)) {
@@ -158,6 +175,11 @@ void doMotor(char *cmd) {
       Serial.println("refused: lowering MLU while spinning brakes into the supply - release, wait until it stops");
       return;
     }
+#if STAGE == 5
+    mluLimit = v;                                    // applied by temperatureTask (with the 0.40 x Vbus rule)
+    Serial.print("voltage cap: "); Serial.print(v, 1); Serial.println(" V (and never above 0.40 x Vbus)");
+    return;
+#endif
   }
   command.motor(&motor, cmd);
 }
@@ -198,17 +220,19 @@ static void noRegenTask() {
 }
 
 #if STAGE == 5
-// ---- throttle: 0..100 % -> 0..limitBase A, must be released once before it acts ("armed") ----------------
+// ---- drive: throttle = maximum speed (see board.h), must be released once before it acts ("armed") ----------
+static const float RADS_PER_KMH = GEAR_RATIO / (WHEEL_DIAMETER_M / 2.0f) / 3.6f;   // motor rad/s per km/h
 static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
-static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrTarget = 0.0f, thrPct = 0.0f;
-static void thrOff(const char *why) { thrOn = false; thrTarget = 0.0f; motor.target = 0.0f; Serial.println(why); }
+static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrPct = 0.0f;
+static float iCmd = 0.0f, vSetKmh = 0.0f, vMaxKmh = 0.0f;
+static void thrOff(const char *why) { thrOn = false; iCmd = 0.0f; motor.target = 0.0f; Serial.println(why); }
 // "A1" on, "A0" off, "AI" idle = now, "AF" full = now, "A" status
 void doThrottle(char *cmd) {
   float v = ain::throttleVolts();
   switch (cmd[0]) {
-    case '1': thrOn = true; thrArmed = false; thrTarget = 0.0f; motor.target = 0.0f;
+    case '1': thrOn = true; thrArmed = false; iCmd = 0.0f; motor.target = 0.0f;
               Serial.println("throttle ON - release it fully to arm"); break;
-    case '0': thrOff("throttle OFF, target 0 - T commands work again"); break;
+    case '0': thrOff("throttle OFF, target 0 - T<amps> commands work again (test mode)"); break;
     // dead band: idle 0.1 V above the released reading (noise must not count as "pressed"), full 0.05 V below
     case 'I': thrIdle = v + 0.10f; Serial.print("released "); Serial.print(v, 2); Serial.print(" V -> idle = ");
               Serial.print(thrIdle, 2); Serial.println(" V"); break;
@@ -219,8 +243,9 @@ void doThrottle(char *cmd) {
   if (thrFull < thrIdle + 0.2f) Serial.println("WARNING: full must be at least 0.2 V above idle - recalibrate (AI / AF)");
   Serial.print("throttle "); Serial.print(thrOn ? (thrArmed ? "ON, armed" : "ON, not armed (release it)") : "OFF");
   Serial.print(" | now "); Serial.print(v, 2); Serial.print(" V | idle "); Serial.print(thrIdle, 2);
-  Serial.print(" V | full "); Serial.print(thrFull, 2); Serial.print(" V | max "); Serial.print(limitBase, 1);
-  Serial.println(" A");
+  Serial.print(" V | full "); Serial.print(thrFull, 2); Serial.print(" V | 100 % = "); Serial.print(SPEED_MAX_KMH, 0);
+  Serial.print(" km/h | max "); Serial.print(limitBase, 1); Serial.print(" A, +"); Serial.print(CURRENT_RAMP_A_S, 1);
+  Serial.println(" A/s");
 }
 static void throttleTask() {
   static uint32_t t = 0;
@@ -239,15 +264,19 @@ static void throttleTask() {
   }
   thrPct = x * 100.0f;
   if (!thrArmed) {
-    thrTarget = 0.0f; motor.target = 0.0f;
+    iCmd = 0.0f; motor.target = 0.0f;
     if (x <= 0.0f && !isnan(v) && v <= THROTTLE_FAULT_V && thrFull >= thrIdle + 0.2f) {
       thrArmed = true; Serial.println("# throttle armed");
     }
     return;
   }
-  float want = x * limitBase;                        // A
-  thrTarget = (want > thrTarget) ? min(want, thrTarget + THROTTLE_RAMP_A_S * dt) : want;
-  motor.target = thrTarget;
+  // highest speed the voltage cap can deliver (1 V reserve for the winding resistance at 10 A)
+  vMaxKmh = constrain((motor.voltage_limit - 1.0f) / KE_V_PER_RADS / RADS_PER_KMH, 0.0f, SPEED_MAX_KMH);
+  vSetKmh = x * vMaxKmh;
+  float vKmh = motor.shaft_velocity / RADS_PER_KMH;
+  float want = (x > 0.0f) ? constrain(SPEED_P_A_PER_KMH * (vSetKmh - vKmh), 0.0f, limitBase) : 0.0f;
+  iCmd = (want > iCmd) ? min(want, iCmd + CURRENT_RAMP_A_S * dt) : want;   // up: ramp, down: at once
+  motor.target = iCmd;
 }
 
 // Quiet standstill: throttle released and the motor (almost) stopped -> DRV8353 COAST bit = all six FETs off.
@@ -263,7 +292,7 @@ static void setCoast(bool on) {
 }
 static void coastTask() {
   float v = fabsf(motor.shaft_velocity);
-  bool released = !thrOn || thrTarget <= 0.0f;
+  bool released = !thrOn || iCmd <= 0.0f;
   if (!thrOn) { setCoast(false); return; }            // T commands: behave as before
   if (released && v < 1.0f) setCoast(true);
   else if (!released || v > 5.0f) setCoast(false);   // hysteresis: a push by hand alone doesn't toggle it
@@ -292,9 +321,6 @@ void setup() {
   Serial.print("battery build: "); Serial.print(BATTERY_CELLS); Serial.print("S, ");
   Serial.print(vbus / BATTERY_CELLS, 2); Serial.println(" V per cell");
   if (vbus < BUS_UV_STOP) halt("battery below 3.0 V per cell (or not the configured cell count)");
-#endif
-#if STAGE == 5
-  if (FOC_VOLTAGE_MAX > FOC_MAX_FRACTION * vbus) halt("bus voltage too low for the fixed voltage cap FOC_VOLTAGE_MAX");
 #endif
   if (!drv::begin(Serial)) halt("DRV8353 does not answer on SPI - run step 1");
 
@@ -354,9 +380,14 @@ void setup() {
 #endif
   if (!motor.initFOC()) halt("initFOC failed - see the messages above (hall order / pole pairs / align voltage)");
 #if STAGE == 5
-  motor.updateVoltageLimit(FOC_VOLTAGE_MAX);         // fixed cap from here on (current PI limits follow)
-  Serial.print("voltage cap fixed at "); Serial.print(FOC_VOLTAGE_MAX, 1); Serial.print(" V = ");
-  Serial.print(FOC_VOLTAGE_MAX / vbus, 2); Serial.println(" x Vbus (MLU can only lower it)");
+  motor.updateVoltageLimit(min(FOC_VOLTAGE_MAX, FOC_MAX_FRACTION * vbus));   // current PI limits follow
+  Serial.print("voltage cap "); Serial.print(motor.voltage_limit, 1); Serial.print(" V (max ");
+  Serial.print(FOC_VOLTAGE_MAX, 0); Serial.print(" V, never above "); Serial.print(FOC_MAX_FRACTION, 2);
+  Serial.println(" x Vbus)");
+  Serial.print("drive: throttle = max speed 0.."); Serial.print(SPEED_MAX_KMH, 0); Serial.print(" km/h, current 0..");
+  Serial.print(CURRENT_LIMIT, 0); Serial.print(" A, +"); Serial.print(CURRENT_RAMP_A_S, 1);
+  Serial.print(" A/s, gear "); Serial.print(GEAR_RATIO, 1); Serial.print(":1, wheel "); Serial.print(WHEEL_DIAMETER_M, 3);
+  Serial.println(" m");
 #endif
 #endif
 
@@ -402,6 +433,10 @@ static void temperatureTask() {
 #if STAGE == 5
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;
+  if (vb > 9.0f) {                                   // voltage cap: MLU value, but never above 0.40 x Vbus
+    float cap = min(mluLimit, FOC_MAX_FRACTION * vb);
+    if (fabsf(cap - motor.voltage_limit) > 0.1f) motor.updateVoltageLimit(cap);
+  }
 #else
   float lim = limitBase * k;                         // V
   motor.voltage_limit = lim;
@@ -419,7 +454,11 @@ static void temperatureTask() {
 #endif
 #if STAGE == 5
     Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");
-    if (thrOn) { Serial.print(" | thr "); Serial.print(thrArmed ? "" : "(not armed) "); Serial.print(thrPct, 0); Serial.print(" %"); }
+    if (thrOn) {
+      Serial.print(" | thr "); Serial.print(thrArmed ? "" : "(not armed) "); Serial.print(thrPct, 0);
+      Serial.print(" % -> "); Serial.print(vSetKmh, 1); Serial.print(" km/h (max "); Serial.print(vMaxKmh, 0);
+      Serial.print(") | motor = "); Serial.print(motor.shaft_velocity / RADS_PER_KMH, 1); Serial.print(" km/h");
+    }
     if (coasting) Serial.print(" COAST");
 #endif
     Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");

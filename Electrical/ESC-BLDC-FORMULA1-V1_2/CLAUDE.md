@@ -62,6 +62,13 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     modulation → controller spikes; spikes on the long gate/source traces at 45 V; mechanical crack.
     (Also fixed: halt() read the fault registers after EN low → garbage 0x7FF.)
     Until cleared: `MLU_MAX_FRACTION` 0.45 (was 0.55), scope the phase nodes / SPx at 45 V before high speed.
+  - **Drive concept decided (2026-10-15), efficiency car, not performance:** throttle = maximum speed 0–40 km/h,
+    P speed controller → current 0–10 A (hard, never more), ramp +2 A/s (soft freewheel engagement), never
+    negative (freewheel hub, no braking), released = coast, COAST once stopped. Gear 8:1 / wheel 0.508 m assumed
+    (to confirm). Voltage cap 17 V but ≤ 0.40 × Vbus. Protections after board #1: total |U| limit (CappedMotor),
+    IDRIVE 100/200 mA (was 150/300), OCP latched at VDS 0.3 V (was auto-retry 0.4 V), sine PWM, raw halls,
+    hard stops (FET 90 °C, motor 100 °C, pack < 36 V for 2 s). Next: board #2 bring-up, then scope the phase
+    pads / low-side sources at 45 V and step the load up to 10 A.
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
     ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,

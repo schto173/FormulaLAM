@@ -38,14 +38,24 @@ off again below 16.8 V). Below that the Nucleo stays dark, so always bring up at
 
 Before step 3: put the real pole pair count from step 2 into `POLE_PAIRS` in `include/board.h`.
 
-## Throttle (step 5)
-Throttle on J7 (1 = 3.3 V, 2 = signal, 3 = GND). It sets the motor current: 0–100 % → 0 … `L` amps (default
-`CURRENT_LIMIT` 5 A). It is on after start-up (`THROTTLE_ON_AT_START`) but only acts after it has been released
-once ("armed"); the current rises at most 10 A/s and drops at once when released. Commands: `A` status,
-`AI` idle = now (released), `AF` full = now (pressed fully), `A0` off (T commands work again), `A1` on.
-The motor voltage cap is a **fixed** number, `FOC_VOLTAGE_MAX` (14 V battery build ≈ 3000 rpm, 9 V bench build);
-the start is refused if it is above 0.40 × Vbus. `MLU<volts>` can only lower it. Status line: `Umax …`.
-Put the calibrated volts into `THROTTLE_IDLE_V` / `THROTTLE_FULL_V` in `include/board.h`.
+## Drive mode (step 5): throttle = maximum speed
+Throttle on J7 (1 = 3.3 V, 2 = signal, 3 = GND). The throttle is **not** the current: 0–100 % sets the
+**maximum speed** 0–40 km/h (`SPEED_MAX_KMH`). While the motor is slower than that, a speed controller asks for
+current, `SPEED_P_A_PER_KMH` = 2 A per km/h too slow, limited to 0–10 A (`CURRENT_LIMIT`, hard). The current
+rises at most 2 A/s (`CURRENT_RAMP_A_S`, soft freewheel engagement) and drops at once. It is never negative:
+no braking (the freewheel hub can't pass it on). Released = 0 A: the motor spins down, the car rolls; once the
+motor stands still the DRV goes to COAST (all FETs off). Speeds are converted with `GEAR_RATIO` and
+`WHEEL_DIAMETER_M` in `include/board.h` (8:1, 0.508 m - **confirm for the car**).
+Physics: 10 A ≈ 1 Nm at the motor → at 8:1 and 100 kg at most ~1 km/h per second on the flat.
+
+The throttle is on after start-up but only acts after it has been released once ("armed"). Commands: `A` status,
+`AI` idle = now (released), `AF` full = now (pressed fully), `A0` off (then `T<amps>` sets the current directly,
+test mode), `A1` on. Put the calibrated volts into `THROTTLE_IDLE_V` / `THROTTLE_FULL_V`.
+
+Voltage cap: `FOC_VOLTAGE_MAX` 17 V (enough for 40 km/h), but never above 0.40 × Vbus (`FOC_MAX_FRACTION`), so
+with a nearly empty pack the top speed drops (42–50 V: 40 km/h, 38 V: ~36, 36 V: ~34). The target speed is
+limited to what the cap can deliver, so the controller never runs into the voltage limit. `MLU<volts>` lowers
+the cap for a test. The total voltage |Uq, Ud| is limited to the cap (`CappedMotor`), so the PWM never clips.
 
 ## Bus protection (steps 3–5)
 A torque against the rotation makes the motor a generator; a bench supply cannot take that energy back and the
@@ -55,7 +65,7 @@ bus capacitors would charge far above 60 V. So: a target against the rotation (a
 
 ## Battery (12S Li-ion): environment `5_foc_battery`
 Same as step 5, built with `-D BATTERY_CELLS=12`: refuses to start below 36.0 V (3.0 V/cell) or above 51.6 V,
-over-voltage stop at 55.4 V, stop when below 36.0 V (3.0 V/cell) for more than 2 s, fixed voltage cap 14 V.
+over-voltage stop at 55.4 V, stop when below 36.0 V (3.0 V/cell) for more than 2 s, voltage cap 17 V / 0.40 × Vbus.
 The bench build (`5_foc_current`) refuses to start above 35 V, so it can't run on the pack by mistake.
 Before the first connection: polarity checked with a multimeter (the board has **no reverse-polarity
 protection**), anti-spark plug (XT90-S) for the 660 µF inrush, a small fuse in F1 for the first tests.

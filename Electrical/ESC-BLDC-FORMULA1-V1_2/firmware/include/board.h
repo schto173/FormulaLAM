@@ -9,12 +9,13 @@
 // bench supply below the 16.8 V UVLO of the 5 V regulator (Nucleo resets).
 #define ALIGN_VOLTAGE     0.4f    // V used to align the halls in step 4 (raise in 0.1 V steps if it does not move)
 #define VOLTAGE_LIMIT     0.5f    // V max applied to the motor in steps 3-5 (in step 5 this also caps the speed)
-#define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
-#define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the fixed FOC_VOLTAGE_MAX
+#define CURRENT_LIMIT     10.0f   // A motor current, HARD maximum in step 5 ("L" can only lower it)
+#define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the cap below
+#define FOC_VOLTAGE_MAX   17.0f   // V motor voltage cap (enough for 40 km/h); never above FOC_MAX_FRACTION x Vbus
 #define USE_SVPWM         0       // 0 = plain sine PWM (SVPWM only matters above 0.5 x Vbus, which we don't use)
 #define HALL_SMOOTHING    0       // 0 = angle straight from the halls, no estimation between the 60-degree steps
-// The fixed voltage cap must stay below this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus, and
-// above ~0.45 the low-side shunts get too little time to measure. Start is refused if the cap is too high.
+// The voltage cap never exceeds this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus, and above
+// ~0.45 the low-side shunts get too little time to measure. With an empty pack this lowers the top speed.
 #define FOC_MAX_FRACTION  0.40f
 // Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
 #define CURR_Q_P          0.09f
@@ -44,13 +45,11 @@
 #define BUS_OV_LIMIT      (BATTERY_CELLS * 4.20f + 5.0f)  // 12S: 55.4 V (full 50.4 V + margin; TVS stand-off 60 V)
 #define BUS_START_MAX     (BATTERY_CELLS * 4.30f)         // 12S: 51.6 V - above: wrong pack, refuse to start
 #define BUS_UV_STOP       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - below for more than 2 s: stop (empty)
-#define FOC_VOLTAGE_MAX   14.0f   // V fixed motor voltage cap (~3000 rpm no load); 0.39 x Vbus at an empty pack
 #define ALIGN_V_BUS       0.6f    // V for hall + current-sense alignment: the dead time eats ~0.2 V at 50 V
 #else
 #define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
 #define BUS_START_MAX     35.0f
 #define BUS_UV_STOP       0.0f    // no under-voltage stop on the bench
-#define FOC_VOLTAGE_MAX   9.0f    // V fixed motor voltage cap on the bench supply (0.38 x 24 V)
 #define ALIGN_V_BUS       ALIGN_VOLTAGE
 #endif
 
@@ -62,7 +61,18 @@
 #define THROTTLE_IDLE_V   0.97f   // V at and below: 0 A
 #define THROTTLE_FULL_V   2.55f   // V at and above: full current
 #define THROTTLE_FAULT_V  3.25f   // V above: broken wire / short to 3.3 V -> 0 A, must be released to re-arm
-#define THROTTLE_RAMP_A_S 10.0f   // A/s the current may rise (it drops immediately when released)
+
+// ---- drive (step 5): throttle = MAXIMUM SPEED, not current ----------------------------------------------
+// Throttle 0..100 % -> target 0..SPEED_MAX_KMH. A P speed controller asks for motor current 0..CURRENT_LIMIT
+// while the motor is slower than the target; never negative (no braking - the freewheel hub can't pass it on).
+// The current rises at most CURRENT_RAMP_A_S (soft freewheel engagement) and drops at once. Released = 0 A,
+// the motor spins down, the car rolls; once the motor stands still the DRV goes to COAST (all FETs off).
+#define GEAR_RATIO        8.0f    // motor turns per wheel turn                       <- CONFIRM
+#define WHEEL_DIAMETER_M  0.508f  // outer diameter with tyre (20" is often 0.48-0.50) <- CONFIRM
+#define SPEED_MAX_KMH     40.0f   // throttle 100 %
+#define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
+#define CURRENT_RAMP_A_S  2.0f    // A/s the current may rise
+#define KE_V_PER_RADS     0.045f  // measured back-EMF: Uq per rad/s of motor speed (2026-10-14, coasting)
 
 // ---- temperature protection (steps 3-5): hard stop, no derating ---------------------------------------------
 #define FET_TEMP_STOP     90.0f   // C, NTC TH1 on the board next to Q4

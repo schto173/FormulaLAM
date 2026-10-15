@@ -28,12 +28,14 @@ inline void     write(uint8_t a, uint16_t d) { xfer((uint16_t(a & 0xF) << 11) | 
 // Settings written at start-up. Everything else stays at the datasheet default (6x PWM mode).
 struct Setting { uint8_t reg; uint16_t val; const char *what; };
 static const Setting SETTINGS[] = {
-  // IDRIVE for CSD19532Q5B (Qgd ~8 nC): 150 mA source / 300 mA sink -> ~50 ns / ~25 ns edges.
-  // The default 1000 / 2000 mA switches very hard and rings; raise only if the FETs run hot.
-  { GATE_HS,  0x333, "gate drive HS: unlocked, IDRIVEP 150 mA, IDRIVEN 300 mA" },
-  { GATE_LS,  0x733, "gate drive LS: CBC, TDRIVE 4 us, IDRIVEP 150 mA, IDRIVEN 300 mA" },
-  // VDS_LVL 0.4 V ~ 50 A (hot) .. 100 A (cold) across a 4-8 mOhm FET. Default 1 V would never trip.
-  { OCP_CTRL, 0x157, "OCP: dead time 100 ns, auto-retry, deglitch 2 us, VDS_LVL 0.4 V" },
+  // IDRIVE for CSD19532Q5B (Qgd ~8 nC): 100 mA source / 200 mA sink -> ~80 ns / ~40 ns edges.
+  // Slower than before (150/300) on purpose after board #1's DRV failure: slower current and voltage changes =
+  // smaller spikes on the long V1 traces. Switching loss stays small at 20 kHz and <= 10 A.
+  { GATE_HS,  0x322, "gate drive HS: unlocked, IDRIVEP 100 mA, IDRIVEN 200 mA" },
+  { GATE_LS,  0x722, "gate drive LS: CBC, TDRIVE 4 us, IDRIVEP 100 mA, IDRIVEN 200 mA" },
+  // VDS_LVL 0.3 V ~ 40 A (hot) .. 75 A (cold) across a 4-8 mOhm FET - far above our 10 A. LATCHED: one
+  // over-current switches the bridge off and it stays off (no repeated hard cut-offs = no repeated spikes).
+  { OCP_CTRL, 0x116, "OCP: dead time 100 ns, LATCHED shutdown, deglitch 2 us, VDS_LVL 0.3 V" },
   // Bidirectional (VREF/2 = 1.65 V centre), 20 V/V: +-30 A * 2 mOhm * 20 = +-1.2 V -> 0.45..2.85 V
   { CSA_CTRL, 0x280, "CSA: VREF/2 bidirectional, gain 20 V/V, sense OCP 0.25 V" },
   { DRV_CTRL, 0x000, "driver control: 6x PWM, faults enabled" },
