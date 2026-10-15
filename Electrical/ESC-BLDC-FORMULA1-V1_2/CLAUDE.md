@@ -53,6 +53,15 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     at 36 V / cell UV; output read a meaningless 11 V until charged). Pack ~43.6 V (MLU max 24 V):
     **`MLU24` → 550 rad/s ≈ 5250 rpm** no-load (datasheet 5140 rpm @ 48 V). Hiss at standstill (0 A FOC with the
     FETs switching) fixed with the DRV8353 COAST bit while released + stopped.
+  - **Board #1 FAILED (2026-10-15)** on the pack (~43.6 V), auto voltage cap 24 V, throttle 43 % (2.2 A),
+    ~512 rad/s: `STOPPED: DRV8353 nFAULT`. Since then permanent **GDUV**, even with no PWM (step 1), across power
+    cycles: **VGLS (C29) only 3 V instead of ~11 V**; VBUCK 12 V ok, SPI/registers ok. Cold: C29 147 kΩ, all six
+    gates 118–137 kΩ to GND/phase (no broken gate), VGLS diode-mode 2.2 V like an unused board; C29 can't be
+    measured in-circuit (not on a good board either). Open: C29 leaking/cracked vs. DRV8353 VGLS regulator damaged
+    → piggyback test (new 1 µF ≥25 V on top of C29). Cause unknown; suspects: current-sense dropouts near full
+    modulation → controller spikes; spikes on the long gate/source traces at 45 V; mechanical crack.
+    (Also fixed: halt() read the fault registers after EN low → garbage 0x7FF.)
+    Until cleared: `MLU_MAX_FRACTION` 0.45 (was 0.55), scope the phase nodes / SPx at 45 V before high speed.
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
     ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,

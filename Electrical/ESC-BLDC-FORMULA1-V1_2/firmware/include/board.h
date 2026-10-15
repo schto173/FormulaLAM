@@ -17,7 +17,9 @@
 #define USE_SVPWM         1
 // MLU is refused above this fraction of Vbus: keeps a few % margin so the low-side shunts still get time
 // to measure (SVPWM max 0.577, SinePWM max 0.5)
-#define MLU_MAX_FRACTION  (USE_SVPWM ? 0.55f : 0.45f)
+// TEMPORARILY 0.45 (was 0.55): board #1 lost its low-side gate supply (VGLS 3 V, GDUV) at ~510 rad/s near
+// full modulation on 45 V, cause unknown. Back to 0.55 once the phase nodes are checked with the scope at 45 V.
+#define MLU_MAX_FRACTION  (USE_SVPWM ? 0.45f : 0.45f)
 #define HALL_SMOOTHING    1       // 1 = SmoothingSensor interpolates between the 60-degree hall steps (steps 4-5)
 // Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
 #define CURR_Q_P          0.09f
