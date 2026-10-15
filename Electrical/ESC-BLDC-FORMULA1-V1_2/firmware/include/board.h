@@ -45,14 +45,16 @@
 #endif
 #if BATTERY_CELLS
 #define BUS_OV_LIMIT      (BATTERY_CELLS * 4.20f + 5.0f)  // 12S: 55.4 V (full 50.4 V + margin; TVS stand-off 60 V)
-#define BUS_START_MAX     (BATTERY_CELLS * 4.25f)         // 12S: 51.0 V - above: wrong pack, refuse to start
+#define BUS_START_MAX     (BATTERY_CELLS * 4.30f)         // 12S: 51.6 V - above: wrong pack, refuse to start
 #define BUS_UV_FULL       (BATTERY_CELLS * 3.20f)         // 12S: 38.4 V - full current above
 #define BUS_UV_ZERO       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - current derated linearly to 0 (coast)
+#define ALIGN_V_BUS       0.6f    // V for hall + current-sense alignment: the dead time eats ~0.2 V at 50 V
 #else
 #define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
 #define BUS_START_MAX     35.0f
 #define BUS_UV_FULL       0.0f    // no under-voltage derating on the bench
 #define BUS_UV_ZERO       0.0f
+#define ALIGN_V_BUS       ALIGN_VOLTAGE
 #endif
 
 // ---- throttle (J7: 1 = 3.3 V, 2 = signal, 3 = GND; 100k pull-down -> unplugged reads 0 V) - step 5 only --

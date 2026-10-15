@@ -52,7 +52,7 @@ bus capacitors would charge far above 60 V. So: a target against the rotation (a
 `BUS_OV_LIMIT` (40 V for the bench; raise it for the battery). The PWM follows the measured bus voltage.
 
 ## Battery (12S Li-ion): environment `5_foc_battery`
-Same as step 5, built with `-D BATTERY_CELLS=12`: refuses to start below 36.0 V (3.0 V/cell) or above 51.0 V,
+Same as step 5, built with `-D BATTERY_CELLS=12`: refuses to start below 36.0 V (3.0 V/cell) or above 51.6 V,
 over-voltage stop at 55.4 V, current derated linearly from 38.4 V (3.2 V/cell, full) to 36.0 V (0 = coast).
 The bench build (`5_foc_current`) refuses to start above 35 V, so it can't run on the pack by mistake.
 Before the first connection: polarity checked with a multimeter (the board has **no reverse-polarity

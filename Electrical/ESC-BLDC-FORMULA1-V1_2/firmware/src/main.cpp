@@ -297,7 +297,7 @@ void setup() {
 #else
   motor.linkSensor(&sensor);
 #endif
-  motor.voltage_sensor_align = ALIGN_VOLTAGE;
+  motor.voltage_sensor_align = ALIGN_V_BUS;       // 0.4 V bench, 0.6 V battery build
   motor.controller = MotionControlType::torque;
   motor.target = 0;
 #if STAGE == 4
