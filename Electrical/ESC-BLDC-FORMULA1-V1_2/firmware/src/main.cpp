@@ -184,10 +184,17 @@ void doMotor(char *cmd) {
 
 static bool pwmReady = false;
 static void halt(const char *why) {
+  // snapshot first, then PWM off, then read the faults - while EN is still HIGH: once EN is low the DRV8353
+  // sleeps, SPI doesn't answer and the SDO pull-up makes every fault bit read as 1 (0x7FF)
+  float sp = motor.shaft_velocity, uq = motor.voltage.q, iq = motor.current.q, vb = ain::busVolts(2);
+  bool nf = drv::faultActive();
   if (pwmReady) motor.disable();
-  digitalWrite(PIN_DRV_EN, LOW);
   Serial.print("STOPPED: "); Serial.println(why);
+  Serial.print("  at: speed "); Serial.print(sp, 1); Serial.print(" rad/s | Uq "); Serial.print(uq, 2);
+  Serial.print(" V | Iq "); Serial.print(iq, 2); Serial.print(" A | Vbus "); Serial.print(vb, 1);
+  Serial.print(" V | nFAULT "); Serial.println(nf ? "LOW" : "high");
   drv::printFaults(Serial);
+  digitalWrite(PIN_DRV_EN, LOW);
   while (true) { digitalWrite(PIN_LED, !digitalRead(PIN_LED)); delay(100); }
 }
 
