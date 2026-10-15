@@ -1,0 +1,13 @@
+# KiCad local / backup files
+*-backups/
+*.before-*
+*.kicad_prl
+*.lck
+*.routed-*
+*.user-routed-*
+.history/
+__pycache__/
+fp-info-cache
+jlcpcb/old-*/
+tools/.ee_cache/
+_backup-*/
