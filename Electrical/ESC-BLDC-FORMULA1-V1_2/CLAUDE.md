@@ -49,6 +49,12 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     No-load top speed with SVPWM at 0.55 × Vbus: full ~600 rad/s (5700 rpm), nominal ~515 rad/s (4900 rpm),
     empty ~430 rad/s (4100 rpm); under 15 A load ~1.5 V less. → 4500–5000 rpm burns only in the upper half of
     the charge; consider gearing for ~4000–4500 rpm. Pack read 36 V (empty) on 2026-10-14 → charge first.
+  - **First run on the 12S pack (2026-10-15)**, env `5_foc_battery`, 5 A fuse in F1, JBD BMS (it had cut the output
+    at 36 V / cell UV; output read a meaningless 11 V until charged). Pack ~43.6 V (MLU max 24 V):
+    **`MLU24` → 550 rad/s ≈ 5250 rpm** no-load (datasheet 5140 rpm @ 48 V). Hiss at standstill (0 A FOC with the
+    FETs switching) fixed with the DRV8353 COAST bit while released + stopped.
+  - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
+    ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
     load, higher speeds (`MLU` > 2), long runs / temperatures.
 
