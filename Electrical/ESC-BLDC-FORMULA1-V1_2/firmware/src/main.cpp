@@ -145,39 +145,19 @@ static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = 15.0f;
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
 void doLimit(char *cmd) { float v = limitBase; command.scalar(&v, cmd); limitBase = constrain(v, 0.0f, LIMIT_CAP); }
-#if STAGE == 5
-// Step 5 voltage cap: automatic = MLU_MAX_FRACTION x Vbus (follows the battery), or a manual lower cap for tests.
-static float mluManual = NAN;                        // NAN = automatic
-#endif
 void doMotor(char *cmd) {
-#if STAGE == 5
-  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2]) {    // "MLU<volts>" manual cap, "MLU0" automatic
-    float v = atof(cmd + 2), vmax = MLU_MAX_FRACTION * driver.voltage_power_supply;
-    if (v <= 0.0f) { mluManual = NAN; Serial.println("voltage cap: automatic (0.55 x Vbus)"); return; }
-    if (v > vmax) {
-      Serial.print("refused: max is "); Serial.print(vmax, 1);
-      Serial.println(" V at this bus voltage - MLU0 = automatic, always the max");
+  // "MLU<volts>": lower the fixed voltage cap for a test; never above FOC_VOLTAGE_MAX
+  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2]) {
+    float v = atof(cmd + 2);
+    if (!(v > 0.0f && v <= FOC_VOLTAGE_MAX)) {
+      Serial.print("refused: MLU must be between 0 and "); Serial.print(FOC_VOLTAGE_MAX, 1); Serial.println(" V");
       return;
     }
+    // lowering the voltage limit below the back-EMF while spinning brakes regeneratively (see BUS_OV_LIMIT)
     if (v < motor.voltage_limit && fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
       Serial.println("refused: lowering MLU while spinning brakes into the supply - release, wait until it stops");
       return;
     }
-    mluManual = v; motor.updateVoltageLimit(v);
-    Serial.print("voltage cap: manual "); Serial.print(v, 1); Serial.println(" V (MLU0 = automatic)");
-    return;
-  }
-#endif
-  // lowering the voltage limit below the back-EMF while spinning brakes regeneratively (see BUS_OV_LIMIT)
-  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2] && atof(cmd + 2) < motor.voltage_limit &&
-      fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
-    Serial.println("refused: lowering MLU while spinning brakes into the supply - T0 / release, wait until it stops");
-    return;
-  }
-  if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2] && atof(cmd + 2) > MLU_MAX_FRACTION * driver.voltage_power_supply) {
-    Serial.print("refused: MLU max is "); Serial.print(MLU_MAX_FRACTION * driver.voltage_power_supply, 1);
-    Serial.println(" V at this bus voltage (above it the phases clip and the current sensing fails)");
-    return;
   }
   command.motor(&motor, cmd);
 }
@@ -265,7 +245,7 @@ static void throttleTask() {
     }
     return;
   }
-  float want = x * limitBase;                        // A; temperatureTask additionally clamps to the derated limit
+  float want = x * limitBase;                        // A
   thrTarget = (want > thrTarget) ? min(want, thrTarget + THROTTLE_RAMP_A_S * dt) : want;
   motor.target = thrTarget;
 }
@@ -311,7 +291,10 @@ void setup() {
 #if BATTERY_CELLS
   Serial.print("battery build: "); Serial.print(BATTERY_CELLS); Serial.print("S, ");
   Serial.print(vbus / BATTERY_CELLS, 2); Serial.println(" V per cell");
-  if (vbus < BUS_UV_ZERO) halt("battery below 3.0 V per cell (or not the configured cell count)");
+  if (vbus < BUS_UV_STOP) halt("battery below 3.0 V per cell (or not the configured cell count)");
+#endif
+#if STAGE == 5
+  if (FOC_VOLTAGE_MAX > FOC_MAX_FRACTION * vbus) halt("bus voltage too low for the fixed voltage cap FOC_VOLTAGE_MAX");
 #endif
   if (!drv::begin(Serial)) halt("DRV8353 does not answer on SPI - run step 1");
 
@@ -370,6 +353,11 @@ void setup() {
   if (!ain::begin(true)) halt("ADC2 not running after current sense init");   // from here on: no analogRead()!
 #endif
   if (!motor.initFOC()) halt("initFOC failed - see the messages above (hall order / pole pairs / align voltage)");
+#if STAGE == 5
+  motor.updateVoltageLimit(FOC_VOLTAGE_MAX);         // fixed cap from here on (current PI limits follow)
+  Serial.print("voltage cap fixed at "); Serial.print(FOC_VOLTAGE_MAX, 1); Serial.print(" V = ");
+  Serial.print(FOC_VOLTAGE_MAX / vbus, 2); Serial.println(" x Vbus (MLU can only lower it)");
+#endif
 #endif
 
   command.add('T', doTarget, "target");
@@ -382,7 +370,7 @@ void setup() {
   motor.monitor_downsample = 0;                      // off: it floods the terminal (hundreds of lines/s).
   motor.monitor_variables = _MON_TARGET | _MON_VEL | _MON_VOLT_Q | _MON_CURR_Q;   // "MMD500" switches it on
   Serial.println("ready. T<value> sets the target, M for all motor commands (e.g. MVP0.2 velocity P gain).");
-  Serial.println("status every second: # target | speed | Uq | limit | Iq | throttle | FET | motor | Vbus | power");
+  Serial.println("status every second: # target | speed | Uq | limit | Umax | Iq | throttle | FET | motor | Vbus");
   Serial.print("bus over-voltage stop at "); Serial.print(BUS_OV_LIMIT, 0); Serial.println(" V, no regenerative braking");
 #if STAGE == 5
   if (thrOn) Serial.println("THROTTLE is ON: T commands are overridden - type A0 to use T, A for throttle status");
@@ -390,34 +378,30 @@ void setup() {
 #endif
 }
 
-// Temperatures every 200 ms: full power below *_WARN, linear derating up to *_MAX, stop at *_MAX.
+// Every 200 ms: temperatures (hard stop), battery empty (hard stop), PWM scaling follows the measured bus voltage.
 static void temperatureTask() {
   static uint32_t t = 0, tp = 0;
   if (millis() - t < 200) return;
   t = millis();
   float tf = ain::fetCelsius(), tm = ain::motorCelsius();
   if (isnan(tf)) halt("FET temperature sensor fault (TH1 open or shorted)");
-  float k = ain::derate(tf, FET_TEMP_WARN, FET_TEMP_MAX);
+  if (tf >= FET_TEMP_STOP) halt("FET over-temperature");
 #if MOTOR_TEMP_SENSOR != MOTOR_TEMP_UNKNOWN
-  k = min(k, ain::derate(tm, MOTOR_TEMP_WARN, MOTOR_TEMP_MAX));
+  if (!isnan(tm) && tm >= MOTOR_TEMP_STOP) halt("motor over-temperature");
 #endif
-  if (k <= 0.0f) halt("over-temperature");
-  // follow the real bus voltage: SimpleFOC turns volts into duty cycle with it (if the supply is turned up
-  // during a run, a stale value would put MORE voltage on the motor than commanded)
+  // SimpleFOC turns volts into duty cycle with driver.voltage_power_supply: it must be the real bus voltage,
+  // otherwise the motor gets more (or less) voltage than commanded
   float vb = ain::busVolts();
   if (vb > 9.0f) { driver.voltage_power_supply = vb; driver.voltage_limit = vb; }
 #if BATTERY_CELLS
-  // battery under-voltage: derate linearly to 0 (= coast, no stop). Under load the pack sags, so the current
-  // settles where the pack holds ~3.0-3.2 V per cell.
-  if (vb > 9.0f) k = min(k, constrain((vb - BUS_UV_ZERO) / (BUS_UV_FULL - BUS_UV_ZERO), 0.0f, 1.0f));
+  static uint32_t tLow = 0;                          // battery empty: below 3.0 V/cell for more than 2 s -> stop
+  if (vb > 9.0f && vb < BUS_UV_STOP) { if (!tLow) tLow = millis(); else if (millis() - tLow > 2000) halt("battery empty (below 3.0 V per cell for 2 s)"); }
+  else tLow = 0;
 #endif
+  const float k = 1.0f;                              // no derating: full limit or stop
 #if STAGE == 5
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;
-  if (vb > 9.0f) {                                   // voltage cap: automatic or the manual one, never above the max
-    float umax = MLU_MAX_FRACTION * vb, u = isnan(mluManual) ? umax : min(mluManual, umax);
-    if (fabsf(u - motor.voltage_limit) > 0.05f) motor.updateVoltageLimit(u);
-  }
 #else
   float lim = limitBase * k;                         // V
   motor.voltage_limit = lim;
@@ -431,7 +415,7 @@ static void temperatureTask() {
     Serial.print(" | Uq "); Serial.print(motor.voltage.q, 2); Serial.print(" V");
     Serial.print(" | limit "); Serial.print(lim, 2);
 #if STAGE == 5
-    Serial.print(" | Umax "); Serial.print(motor.voltage_limit, 1); Serial.print(isnan(mluManual) ? " auto" : " man");
+    Serial.print(" | Umax "); Serial.print(motor.voltage_limit, 1);
 #endif
 #if STAGE == 5
     Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");
@@ -441,8 +425,7 @@ static void temperatureTask() {
     Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
     if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
     else { Serial.print(tm, 1); Serial.print(" C"); }
-    Serial.print(" | Vbus "); Serial.print(vb, 1); Serial.print(" V | power "); Serial.print(k * 100.0f, 0);
-    Serial.println(" %");
+    Serial.print(" | Vbus "); Serial.print(vb, 1); Serial.println(" V");
   }
 }
 

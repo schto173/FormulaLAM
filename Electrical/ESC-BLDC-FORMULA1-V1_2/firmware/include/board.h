@@ -10,17 +10,12 @@
 #define ALIGN_VOLTAGE     0.4f    // V used to align the halls in step 4 (raise in 0.1 V steps if it does not move)
 #define VOLTAGE_LIMIT     0.5f    // V max applied to the motor in steps 3-5 (in step 5 this also caps the speed)
 #define CURRENT_LIMIT     5.0f    // A max in step 5 (start low!)
-#define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 only during start-up; afterwards automatic = MLU_MAX_FRACTION x Vbus
-                                  // ("MLU<volts>" = lower manual cap for tests, "MLU0" = automatic again)
-// SpaceVectorPWM: max phase voltage Vbus/sqrt(3) instead of Vbus/2 (+15.5 %): 5000 rpm needs ~26 V per phase
-// -> SinePWM only above ~52 V bus, SVPWM above ~45 V (most of a 14S battery). Same switching losses.
-#define USE_SVPWM         1
-// MLU is refused above this fraction of Vbus: keeps a few % margin so the low-side shunts still get time
-// to measure (SVPWM max 0.577, SinePWM max 0.5)
-// TEMPORARILY 0.45 (was 0.55): board #1 lost its low-side gate supply (VGLS 3 V, GDUV) at ~510 rad/s near
-// full modulation on 45 V, cause unknown. Back to 0.55 once the phase nodes are checked with the scope at 45 V.
-#define MLU_MAX_FRACTION  (USE_SVPWM ? 0.45f : 0.45f)
-#define HALL_SMOOTHING    1       // 1 = SmoothingSensor interpolates between the 60-degree hall steps (steps 4-5)
+#define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the fixed FOC_VOLTAGE_MAX
+#define USE_SVPWM         0       // 0 = plain sine PWM (SVPWM only matters above 0.5 x Vbus, which we don't use)
+#define HALL_SMOOTHING    0       // 0 = angle straight from the halls, no estimation between the 60-degree steps
+// The fixed voltage cap must stay below this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus, and
+// above ~0.45 the low-side shunts get too little time to measure. Start is refused if the cap is too high.
+#define FOC_MAX_FRACTION  0.40f
 // Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
 #define CURR_Q_P          0.09f
 #define CURR_D_P          0.06f
@@ -28,7 +23,7 @@
 
 // ---- motor temperature sensor (white wire, J8 pin 6) ------------------------------------------------
 // Type unknown so far: step 1 prints the sensor resistance and a guess. Set it here, then steps 3-5 show
-// the motor temperature in C and derate / stop on over-temperature.
+// the motor temperature in C and stop on over-temperature.
 #define MOTOR_TEMP_UNKNOWN 0
 #define MOTOR_TEMP_NTC10K  1
 #define MOTOR_TEMP_KTY84   2
@@ -48,14 +43,14 @@
 #if BATTERY_CELLS
 #define BUS_OV_LIMIT      (BATTERY_CELLS * 4.20f + 5.0f)  // 12S: 55.4 V (full 50.4 V + margin; TVS stand-off 60 V)
 #define BUS_START_MAX     (BATTERY_CELLS * 4.30f)         // 12S: 51.6 V - above: wrong pack, refuse to start
-#define BUS_UV_FULL       (BATTERY_CELLS * 3.20f)         // 12S: 38.4 V - full current above
-#define BUS_UV_ZERO       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - current derated linearly to 0 (coast)
+#define BUS_UV_STOP       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - below for more than 2 s: stop (empty)
+#define FOC_VOLTAGE_MAX   14.0f   // V fixed motor voltage cap (~3000 rpm no load); 0.39 x Vbus at an empty pack
 #define ALIGN_V_BUS       0.6f    // V for hall + current-sense alignment: the dead time eats ~0.2 V at 50 V
 #else
 #define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
 #define BUS_START_MAX     35.0f
-#define BUS_UV_FULL       0.0f    // no under-voltage derating on the bench
-#define BUS_UV_ZERO       0.0f
+#define BUS_UV_STOP       0.0f    // no under-voltage stop on the bench
+#define FOC_VOLTAGE_MAX   9.0f    // V fixed motor voltage cap on the bench supply (0.38 x 24 V)
 #define ALIGN_V_BUS       ALIGN_VOLTAGE
 #endif
 
@@ -69,11 +64,9 @@
 #define THROTTLE_FAULT_V  3.25f   // V above: broken wire / short to 3.3 V -> 0 A, must be released to re-arm
 #define THROTTLE_RAMP_A_S 10.0f   // A/s the current may rise (it drops immediately when released)
 
-// ---- temperature protection (steps 3-5): full power below WARN, linear derating, motor stops at MAX ----
-#define FET_TEMP_WARN     80.0f   // C, NTC TH1 on the board next to Q4
-#define FET_TEMP_MAX     100.0f
-#define MOTOR_TEMP_WARN   90.0f   // C, only active once MOTOR_TEMP_SENSOR is set
-#define MOTOR_TEMP_MAX   110.0f
+// ---- temperature protection (steps 3-5): hard stop, no derating ---------------------------------------------
+#define FET_TEMP_STOP     90.0f   // C, NTC TH1 on the board next to Q4
+#define MOTOR_TEMP_STOP  100.0f   // C, motor NTC (J8 pin 6)
 
 // ---- gate driver (DRV8353RS) --------------------------------------------------------------------
 // 6-PWM on TIM1 complementary pairs: phase A = CH3/CH3N, B = CH2/CH2N, C = CH1/CH1N

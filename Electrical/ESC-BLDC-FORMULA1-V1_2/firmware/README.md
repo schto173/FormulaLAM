@@ -43,8 +43,8 @@ Throttle on J7 (1 = 3.3 V, 2 = signal, 3 = GND). It sets the motor current: 0–
 `CURRENT_LIMIT` 5 A). It is on after start-up (`THROTTLE_ON_AT_START`) but only acts after it has been released
 once ("armed"); the current rises at most 10 A/s and drops at once when released. Commands: `A` status,
 `AI` idle = now (released), `AF` full = now (pressed fully), `A0` off (T commands work again), `A1` on.
-The voltage cap is automatic (0.55 × Vbus, i.e. full speed for the current battery voltage); `MLU<volts>` sets a
-lower manual cap for tests, `MLU0` goes back to automatic. The status line shows it as `Umax … auto/man`.
+The motor voltage cap is a **fixed** number, `FOC_VOLTAGE_MAX` (14 V battery build ≈ 3000 rpm, 9 V bench build);
+the start is refused if it is above 0.40 × Vbus. `MLU<volts>` can only lower it. Status line: `Umax …`.
 Put the calibrated volts into `THROTTLE_IDLE_V` / `THROTTLE_FULL_V` in `include/board.h`.
 
 ## Bus protection (steps 3–5)
@@ -55,7 +55,7 @@ bus capacitors would charge far above 60 V. So: a target against the rotation (a
 
 ## Battery (12S Li-ion): environment `5_foc_battery`
 Same as step 5, built with `-D BATTERY_CELLS=12`: refuses to start below 36.0 V (3.0 V/cell) or above 51.6 V,
-over-voltage stop at 55.4 V, current derated linearly from 38.4 V (3.2 V/cell, full) to 36.0 V (0 = coast).
+over-voltage stop at 55.4 V, stop when below 36.0 V (3.0 V/cell) for more than 2 s, fixed voltage cap 14 V.
 The bench build (`5_foc_current`) refuses to start above 35 V, so it can't run on the pack by mistake.
 Before the first connection: polarity checked with a multimeter (the board has **no reverse-polarity
 protection**), anti-spark plug (XT90-S) for the 660 µF inrush, a small fuse in F1 for the first tests.
@@ -65,8 +65,8 @@ protection**), anti-spark plug (XT90-S) for the 660 µF inrush, a small fuse in 
 - **Motor temperature** (white wire, J8 pin 6): the sensor type is not known yet. Step 1 prints its resistance
   and a guess (at room temperature: ~10 kΩ = NTC 10k, ~600 Ω = KTY84, ~1.1 kΩ = PT1000). Set
   `MOTOR_TEMP_SENSOR` in `include/board.h` accordingly (for an NTC also check `MOTOR_NTC_BETA`, usually 3950).
-- Steps 3–5 print a `# FET … | motor … | Vbus … | power …%` line every second. Above `FET_TEMP_WARN` /
-  `MOTOR_TEMP_WARN` the voltage/current limit is reduced linearly; at `*_MAX` the motor stops.
+- Steps 3–5 print a `# … | FET … | motor … | Vbus …` line every second. Hard stop at `FET_TEMP_STOP` (90 °C) /
+  `MOTOR_TEMP_STOP` (100 °C), no derating.
 - All slow analog values (temperatures, throttle, bus voltage) are read through `include/analog_in.h`.
   **Never use `analogRead()` once the motor runs**: the STM32 core resets ADC1 and ADC2 after every
   `analogRead()`, which destroys SimpleFOC's current sensing.
