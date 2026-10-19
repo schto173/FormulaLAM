@@ -25,7 +25,12 @@ inline uint16_t xfer(uint16_t word) {
 inline uint16_t read(uint8_t a)             { return xfer(0x8000 | (uint16_t(a & 0xF) << 11)); }
 inline void     write(uint8_t a, uint16_t d) { xfer((uint16_t(a & 0xF) << 11) | (d & 0x7FF)); }
 
-// Settings written at start-up. Everything else stays at the datasheet default (6x PWM mode).
+// 3x PWM mode (PWM_MODE = 01b), the mode TI runs on the DRV8353RH-EVM: the MCU sends one PWM per phase on INHx,
+// INLx is that phase's enable (low = both FETs off), the DRV makes the low-side signal + dead time itself.
+// EVERY write to DRV_CTRL must include these bits, otherwise the DRV falls back to 6x mode.
+constexpr uint16_t DRV_CTRL_BASE = 0x020;
+
+// Settings written at start-up. Everything else stays at the datasheet default.
 struct Setting { uint8_t reg; uint16_t val; const char *what; };
 static const Setting SETTINGS[] = {
   // IDRIVE = gate charge current, i.e. how hard the DRV switches the FETs. Chosen with TI's rule
@@ -41,7 +46,7 @@ static const Setting SETTINGS[] = {
   { OCP_CTRL, 0x116, "OCP: dead time 100 ns, LATCHED shutdown, deglitch 2 us, VDS_LVL 0.3 V" },
   // Bidirectional (VREF/2 = 1.65 V centre), 20 V/V: +-30 A * 2 mOhm * 20 = +-1.2 V -> 0.45..2.85 V
   { CSA_CTRL, 0x280, "CSA: VREF/2 bidirectional, gain 20 V/V, sense OCP 0.25 V" },
-  { DRV_CTRL, 0x000, "driver control: 6x PWM, faults enabled" },
+  { DRV_CTRL, DRV_CTRL_BASE, "driver control: 3x PWM (as TI's EVM), faults enabled" },
 };
 
 inline void printFaults(Stream &out) {
@@ -76,7 +81,7 @@ inline bool begin(Stream &out) {
     out.print("reg 0x"); out.print(s.reg, HEX); out.print(" = 0x"); out.print(rb, HEX);
     out.print("  ("); out.print(s.what); out.println(")");
   }
-  write(DRV_CTRL, 0x001);                      // CLR_FLT
+  write(DRV_CTRL, DRV_CTRL_BASE | 0x001);      // CLR_FLT (keeps 3x PWM mode)
   return ok;
 }
 

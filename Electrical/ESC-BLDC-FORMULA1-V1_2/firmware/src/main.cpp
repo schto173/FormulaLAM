@@ -137,7 +137,9 @@ class CappedMotor : public BLDCMotor {
   }
 };
 CappedMotor motor = CappedMotor(POLE_PAIRS);
-BLDCDriver6PWM driver = BLDCDriver6PWM(PIN_INHA, PIN_INLA, PIN_INHB, PIN_INLB, PIN_INHC, PIN_INLC);  // EN is ours
+// DRV8353 in 3x PWM mode (as TI's EVM): INHx = PWM, INLx = per-phase enable (SimpleFOC enable/disable drives them),
+// the DRV makes the low-side signal and the dead time. EN is ours.
+BLDCDriver3PWM driver = BLDCDriver3PWM(PIN_INHA, PIN_INHB, PIN_INHC, PIN_INLA, PIN_INLB, PIN_INLC);
 HallSensor sensor = HallSensor(PIN_HALL_A, PIN_HALL_B, PIN_HALL_C, POLE_PAIRS);
 #if HALL_SMOOTHING
 #include "encoders/smoothing/SmoothingSensor.h"
@@ -288,7 +290,7 @@ static void setCoast(bool on) {
   if (on == coasting) return;
   coasting = on;
   if (!on) { motor.PID_current_q.reset(); motor.PID_current_d.reset(); }
-  drv::write(drv::DRV_CTRL, on ? 0x004 : 0x000);     // DRV_CTRL bit 2 = COAST, 6x PWM mode otherwise
+  drv::write(drv::DRV_CTRL, drv::DRV_CTRL_BASE | (on ? 0x004 : 0x000));   // bit 2 = COAST, keep 3x PWM mode
 }
 static void coastTask() {
   float v = fabsf(motor.shaft_velocity);
@@ -329,9 +331,8 @@ void setup() {
   // phases swung 0..0.5 V (0-2 % duty, <1 us pulses eaten by the dead time) and the motor only jerked.
   driver.voltage_limit = vbus;                       // phases centred at Vbus/2; the motor limit is below
   driver.pwm_frequency = 20000;
-  // 100 ns at 20 kHz, plus the DRV's own 100 ns dead time and VGS handshake (it never turns on both FETs of a
-  // phase). Every ns of dead time costs voltage: 600 ns total was ~0.3 V of the 0.5 V we apply.
-  driver.dead_zone = 0.002f;
+  // No MCU dead time in 3x PWM mode: the DRV inserts its own 100 ns dead time after its VGS handshake
+  // (it never turns on both FETs of a phase).
   if (!driver.init()) halt("PWM driver init failed");
   motor.linkDriver(&driver);
   pwmReady = true;
