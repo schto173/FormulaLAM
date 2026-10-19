@@ -7,7 +7,7 @@ Redesign of the V1.2 ESC HAT (DRV8353RS + 6x CSD19532Q5B, SimpleFOC, NUCLEO-G474
 - **Power supply (option A):** DRV8353 buck makes 12 V (VBUCK) for VM only, faster (R34 180k ≈ 480 kHz, L1 100 µH 6x6);
   TPS562201 makes 5 V from 12 V (replaces the LM5164 58 V buck). 5 V now comes up at ~6 V bus.
 - **Phase voltage sensing removed** (U3 + dividers) – SimpleFOC does not use it. Fuse F1 removed (fuse goes in the battery cable).
-- **Bus caps:** 3x SMD 47 µF 100 V (C11, C21, C68) + MLCCs in every half-bridge; TVS SMCJ54A (12S pack, max 50.4 V).
+- **Bus caps:** 3x SMD 47 µF 100 V (C11, C21, C68) + MLCCs in every half-bridge; TVS SMCJ60A (C224057; starts conducting at 66.7 V, so the board is safe with up to a 60 V battery).
 - **Wheel speed input** J11 (JST-XH 3P: 1 = +5V, 2 = SIG, 3 = GND) → D10 / R78 4.7k to 3V3 / C73 → **PC6 (TIM3_CH1)**.
 - **Test points:** TP1/TP2 Keystone 5001 GND loops for the scope clip (power side / logic side), pads TP3 VGLS,
   TP4 VCP, TP5 12 V, TP6 5 V, TP7 3.3 V.

@@ -27947,7 +27947,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "SMCJ54A"
+		(property "Value" "SMCJ60A"
 			(at 358.14 128.27 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27980,7 +27980,7 @@
 				)
 			)
 		)
-		(property "Description" "Unidirectional TVS 54V standoff (12S pack 50.4 V), 87 V clamp"
+		(property "Description" "Bus TVS 60 V standoff (breakdown 66.7 V min, clamp 96.8 V): safe with a 60 V battery"
 			(at 355.6 127 0)
 			(hide yes)
 			(show_name no)
@@ -27991,7 +27991,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C2943841"
+		(property "LCSC" "C224057"
 			(at 355.6 127 0)
 			(hide yes)
 			(show_name no)
