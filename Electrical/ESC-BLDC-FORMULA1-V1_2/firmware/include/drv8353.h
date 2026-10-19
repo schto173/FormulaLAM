@@ -28,11 +28,14 @@ inline void     write(uint8_t a, uint16_t d) { xfer((uint16_t(a & 0xF) << 11) | 
 // Settings written at start-up. Everything else stays at the datasheet default (6x PWM mode).
 struct Setting { uint8_t reg; uint16_t val; const char *what; };
 static const Setting SETTINGS[] = {
-  // IDRIVE for CSD19532Q5B (Qgd ~8 nC): 100 mA source / 200 mA sink -> ~80 ns / ~40 ns edges.
-  // Slower than before (150/300) on purpose after board #1's DRV failure: slower current and voltage changes =
-  // smaller spikes on the long V1 traces. Switching loss stays small at 20 kHz and <= 10 A.
-  { GATE_HS,  0x322, "gate drive HS: unlocked, IDRIVEP 100 mA, IDRIVEN 200 mA" },
-  { GATE_LS,  0x722, "gate drive LS: CBC, TDRIVE 4 us, IDRIVEP 100 mA, IDRIVEN 200 mA" },
+  // IDRIVE = gate charge current, i.e. how hard the DRV switches the FETs. Chosen with TI's rule
+  // (E2E FAQ "Selecting the Best IDRIVE setting"): IDRIVE = Qgd / edge time, edge time 100-300 ns.
+  // CSD19532Q5B Qgd = 8.7 nC -> 50 mA source (~175 ns edge) / 100 mA sink (~87 ns edge) = the gentlest setting.
+  // TI's E2E engineers name a too high IDRIVE as one way to damage the DRV8353's VGLS supply (charge coupled
+  // through the FET's Cgd into GLx pumps up VGLS) - board #1 died with VGLS damaged at 150/300 mA.
+  // Cost: a little more switching loss (roughly 1-2 W total at 10 A, 45 V, 20 kHz). Raise only after scoping.
+  { GATE_HS,  0x311, "gate drive HS: unlocked, IDRIVEP 50 mA, IDRIVEN 100 mA" },
+  { GATE_LS,  0x711, "gate drive LS: CBC, TDRIVE 4 us, IDRIVEP 50 mA, IDRIVEN 100 mA" },
   // VDS_LVL 0.3 V ~ 40 A (hot) .. 75 A (cold) across a 4-8 mOhm FET - far above our 10 A. LATCHED: one
   // over-current switches the bridge off and it stays off (no repeated hard cut-offs = no repeated spikes).
   { OCP_CTRL, 0x116, "OCP: dead time 100 ns, LATCHED shutdown, deglitch 2 us, VDS_LVL 0.3 V" },
