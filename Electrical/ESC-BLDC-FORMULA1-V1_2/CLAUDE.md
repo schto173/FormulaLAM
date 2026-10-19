@@ -57,16 +57,14 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     ~512 rad/s (~93 % modulation): `STOPPED: DRV8353 nFAULT`. Since then permanent **GDUV**, even with no PWM
     (step 1), across power cycles: **VGLS only 3 V instead of ~11 V**; VBUCK 12 V ok, SPI/registers ok, all six
     gates 118–137 kΩ to GND/phase (no FET gate broken).
-    **Failure mode: the DRV8353's internal low-side gate-drive supply (VGLS regulator / low-side driver) was
-    damaged by electrical overstress while switching at ~45 V.** Not a component defect – C29 is NOT the cause.
-    V1.2 design factors behind it: (1) 30–45 mm gate and source-sense traces (GHx/SHx, GLx/SPx), not routed as
-    pairs → inductive voltage spikes on the DRV8353 pins at every switching edge; (2) the low-side shunts sit in
-    the SPx path – SPx is both the low-side gate-driver return and the shunt-amp input and tolerates only a few
-    volts for < 200 ns; (3) at ~93 % modulation the low-side window is only ~1.7 µs, so the current readings
-    degrade exactly where it failed. TI's own DRV8353RH-EVM (MD016) uses the same parts and low-side shunts, but
-    with the DRV right next to the FETs and very short gate/sense paths – the difference is the V1.2 layout.
-    → V2 (Electrical/ESC-BLDC-FORMULA1-V2_0): TI-style layout, DRV beside the FETs, gate/sense paths 14–26 mm
-    routed as pairs, Kelvin SPx at each low-side source.
+    **Failure mode: the DRV8353's internal low-side gate-drive supply (VGLS regulator / low-side driver) is
+    damaged** – it no longer reaches ~11 V. Not a component defect – C29 is NOT the cause.
+    **Root cause: not determined yet.** Trace length alone does not explain it: TI's DRV8353RH-EVM (MD016, same
+    parts, low-side shunts, 95 V / 15 A) has its FET gates ~27–31 mm (straight line) from the DRV gate pins;
+    V1.2 routed lengths are GH 33–45 mm, GL 21–35 mm, SP 17–33 mm – the same range. Conditions at the failure:
+    ~45 V, ~93 % modulation, where the low-side shunt window is only ~1.7 µs and the current readings were
+    already poor (controller spikes possible). On board #2: scope VGLS, SPx and the phase nodes at 45 V while
+    stepping the modulation up.
     (Also fixed: halt() read the fault registers after EN low → garbage 0x7FF.)
     Firmware since then: `MLU_MAX_FRACTION` 0.45 (was 0.55); scope the phase nodes / SPx at 45 V before high speed.
   - **Drive concept decided (2026-10-15), efficiency car, not performance:** throttle = maximum speed 0–40 km/h,
