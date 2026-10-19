@@ -54,14 +54,21 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     **`MLU24` → 550 rad/s ≈ 5250 rpm** no-load (datasheet 5140 rpm @ 48 V). Hiss at standstill (0 A FOC with the
     FETs switching) fixed with the DRV8353 COAST bit while released + stopped.
   - **Board #1 FAILED (2026-10-15)** on the pack (~43.6 V), auto voltage cap 24 V, throttle 43 % (2.2 A),
-    ~512 rad/s: `STOPPED: DRV8353 nFAULT`. Since then permanent **GDUV**, even with no PWM (step 1), across power
-    cycles: **VGLS (C29) only 3 V instead of ~11 V**; VBUCK 12 V ok, SPI/registers ok. Cold: C29 147 kΩ, all six
-    gates 118–137 kΩ to GND/phase (no broken gate), VGLS diode-mode 2.2 V like an unused board; C29 can't be
-    measured in-circuit (not on a good board either). Open: C29 leaking/cracked vs. DRV8353 VGLS regulator damaged
-    → piggyback test (new 1 µF ≥25 V on top of C29). Cause unknown; suspects: current-sense dropouts near full
-    modulation → controller spikes; spikes on the long gate/source traces at 45 V; mechanical crack.
+    ~512 rad/s (~93 % modulation): `STOPPED: DRV8353 nFAULT`. Since then permanent **GDUV**, even with no PWM
+    (step 1), across power cycles: **VGLS only 3 V instead of ~11 V**; VBUCK 12 V ok, SPI/registers ok, all six
+    gates 118–137 kΩ to GND/phase (no FET gate broken).
+    **Failure mode: the DRV8353's internal low-side gate-drive supply (VGLS regulator / low-side driver) was
+    damaged by electrical overstress while switching at ~45 V.** Not a component defect – C29 is NOT the cause.
+    V1.2 design factors behind it: (1) 30–45 mm gate and source-sense traces (GHx/SHx, GLx/SPx), not routed as
+    pairs → inductive voltage spikes on the DRV8353 pins at every switching edge; (2) the low-side shunts sit in
+    the SPx path – SPx is both the low-side gate-driver return and the shunt-amp input and tolerates only a few
+    volts for < 200 ns; (3) at ~93 % modulation the low-side window is only ~1.7 µs, so the current readings
+    degrade exactly where it failed. TI's own DRV8353RH-EVM (MD016) uses the same parts and low-side shunts, but
+    with the DRV right next to the FETs and very short gate/sense paths – the difference is the V1.2 layout.
+    → V2 (Electrical/ESC-BLDC-FORMULA1-V2_0): TI-style layout, DRV beside the FETs, gate/sense paths 14–26 mm
+    routed as pairs, Kelvin SPx at each low-side source.
     (Also fixed: halt() read the fault registers after EN low → garbage 0x7FF.)
-    Until cleared: `MLU_MAX_FRACTION` 0.45 (was 0.55), scope the phase nodes / SPx at 45 V before high speed.
+    Firmware since then: `MLU_MAX_FRACTION` 0.45 (was 0.55); scope the phase nodes / SPx at 45 V before high speed.
   - **Drive concept decided (2026-10-15), efficiency car, not performance:** throttle = maximum speed 0–40 km/h,
     P speed controller → current 0–10 A (hard, never more), ramp +2 A/s (soft freewheel engagement), never
     negative (freewheel hub, no braking), released = coast, COAST once stopped. Gear 8:1 / wheel 0.508 m assumed

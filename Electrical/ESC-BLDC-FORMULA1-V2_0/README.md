@@ -3,6 +3,14 @@
 Redesign of the V1.2 ESC HAT (DRV8353RS + 6x CSD19532Q5B, SimpleFOC, NUCLEO-G474RE). V1.2 stays untouched in
 `../ESC-BLDC-FORMULA1-V1_2/` (those are the files that were ordered).
 
+## Why V2: how V1.2 board #1 failed
+At ~45 V and ~93 % modulation the DRV8353 faulted and its internal low-side gate-drive supply was permanently
+damaged (GDUV, VGLS 3 V instead of ~11 V). Failure mode: electrical overstress of the DRV8353 low-side driver
+during switching – not a component defect. Cause in the V1.2 layout: 30–45 mm gate / source-sense traces not
+routed as pairs, and the low-side shunts in the SPx path (SPx = low-side driver return + shunt-amp input, only a
+few volts for < 200 ns allowed). TI's DRV8353RH-EVM uses the same parts and low-side shunts with the DRV right
+next to the FETs – V2 copies that arrangement. Board must survive a 60 V battery.
+
 ## What changed vs V1.2
 - **Power supply (option A):** DRV8353 buck makes 12 V (VBUCK) for VM only, faster (R34 180k ≈ 480 kHz, L1 100 µH 6x6);
   TPS562201 makes 5 V from 12 V (replaces the LM5164 58 V buck). 5 V now comes up at ~6 V bus.
