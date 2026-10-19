@@ -13,7 +13,7 @@
 #define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the cap below
 #define FOC_VOLTAGE_MAX   17.0f   // V motor voltage cap (enough for 40 km/h); never above FOC_MAX_FRACTION x Vbus
 #define USE_SVPWM         0       // 0 = plain sine PWM (SVPWM only matters above 0.5 x Vbus, which we don't use)
-#define HALL_SMOOTHING    0       // 0 = angle straight from the halls, no estimation between the 60-degree steps
+#define HALL_SMOOTHING    1       // 1 = SmoothingSensor estimates the angle between the 60-degree hall steps (smooth sine, quieter)
 // The voltage cap never exceeds this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus, and above
 // ~0.45 the low-side shunts get too little time to measure. With an empty pack this lowers the top speed.
 #define FOC_MAX_FRACTION  0.40f
