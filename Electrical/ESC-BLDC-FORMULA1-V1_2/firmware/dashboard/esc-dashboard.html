@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESC Dashboard</title>
+<!--
+  PC dashboard for the ESC HAT bring-up firmware (step 5). Open this file in Edge or Chrome (Web Serial API),
+  click "Connect", pick the Nucleo's COM port, then "Data ON" (sends D1: one $D line every 100 ms).
+  Close the VS Code serial monitor first - only one program can use the COM port.
+  Data line: $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags  (flags 1 COAST, 2 armed, 4 thr on)
+-->
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2330; --muted: #677085; --line: #dde1e8; --grid: #eceef2;
+  --ok: #1f8a4c; --warn: #b7791f; --bad: #c53030; --accent: #2b6cb0;
+  --c1: #2b6cb0; --c2: #d69e2e; --c3: #805ad5; --c4: #2f855a; --c5: #c53030;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #9aa3b5; --line: #2c3340; --grid: #232934;
+    --ok: #48bb78; --warn: #ecc94b; --bad: #fc8181; --accent: #63b3ed;
+    --c1: #63b3ed; --c2: #f6ad55; --c3: #b794f4; --c4: #68d391; --c5: #fc8181;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel);
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; }
+button, select, input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 10px; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+#status { color: var(--muted); margin-left: auto; }
+main { padding: 12px 16px; display: grid; gap: 12px; }
+#stopped { display: none; background: var(--bad); color: #fff; padding: 10px 14px; border-radius: 8px; font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile .k { color: var(--muted); font-size: 12px; }
+.tile .v { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .s { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tile.ok .v { color: var(--ok); } .tile.warn .v { color: var(--warn); } .tile.bad .v { color: var(--bad); }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; }
+.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.chart .title { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.chart .title b { color: var(--ink); font-weight: 600; margin-right: 4px; }
+.sw { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+canvas { width: 100%; height: 170px; display: block; }
+.bottom { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+#console { height: 220px; overflow-y: auto; font: 12px/1.35 ui-monospace, Consolas, monospace; white-space: pre-wrap;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+#console .err { color: var(--bad); font-weight: 600; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.row input { flex: 1; min-width: 120px; }
+.peaks div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 3px 0;
+  font-variant-numeric: tabular-nums; }
+.note { color: var(--muted); font-size: 12px; }
+@media (max-width: 760px) { .bottom { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>ESC Dashboard</h1>
+  <button id="connect" class="primary">Connect</button>
+  <button id="disconnect" disabled>Disconnect</button>
+  <button id="dataOn" disabled>Data ON (D1)</button>
+  <button id="dataOff" disabled>Data OFF (D0)</button>
+  <label class="note">window
+    <select id="win"><option value="30">30 s</option><option value="60" selected>60 s</option>
+      <option value="180">3 min</option><option value="600">10 min</option></select></label>
+  <button id="save" disabled>Save CSV</button>
+  <span id="status">not connected</span>
+</header>
+<main>
+  <div id="stopped"></div>
+  <div class="tiles">
+    <div class="tile" id="t-speed"><div class="k">Motor speed</div><div class="v">–</div><div class="s">target –</div></div>
+    <div class="tile" id="t-thr"><div class="k">Throttle</div><div class="v">–</div><div class="s">–</div></div>
+    <div class="tile" id="t-iq"><div class="k">Motor current Iq</div><div class="v">–</div><div class="s">limit –</div></div>
+    <div class="tile" id="t-fet"><div class="k">FET temperature</div><div class="v">–</div><div class="s">stop at 90 °C</div></div>
+    <div class="tile" id="t-mot"><div class="k">Motor temperature</div><div class="v">–</div><div class="s">stop at 100 °C</div></div>
+    <div class="tile" id="t-vbus"><div class="k">Battery</div><div class="v">–</div><div class="s">–</div></div>
+    <div class="tile" id="t-uq"><div class="k">Uq / cap</div><div class="v">–</div><div class="s">–</div></div>
+  </div>
+  <div class="charts">
+    <div class="chart"><div class="title"><b>Speed</b>
+      <span><i class="sw" style="background:var(--c1)"></i>motor km/h</span>
+      <span><i class="sw" style="background:var(--c2)"></i>target km/h</span></div><canvas id="ch-speed"></canvas></div>
+    <div class="chart"><div class="title"><b>Current</b>
+      <span><i class="sw" style="background:var(--c1)"></i>Iq A</span>
+      <span><i class="sw" style="background:var(--c3)"></i>Id A</span>
+      <span><i class="sw" style="background:var(--c5)"></i>limit A</span></div><canvas id="ch-cur"></canvas></div>
+    <div class="chart"><div class="title"><b>Temperature</b>
+      <span><i class="sw" style="background:var(--c5)"></i>FET °C</span>
+      <span><i class="sw" style="background:var(--c2)"></i>motor °C</span></div><canvas id="ch-temp"></canvas></div>
+    <div class="chart"><div class="title"><b>Voltage</b>
+      <span><i class="sw" style="background:var(--c4)"></i>battery V</span>
+      <span><i class="sw" style="background:var(--c1)"></i>Uq V</span>
+      <span><i class="sw" style="background:var(--c5)"></i>cap V</span></div><canvas id="ch-volt"></canvas></div>
+  </div>
+  <div class="bottom">
+    <div class="box">
+      <div class="note">Board messages (status lines, start-up, errors)</div>
+      <div id="console"></div>
+      <div class="row">
+        <input id="cmd" placeholder="command, e.g. A, L5, MLU12 - Enter sends" disabled>
+        <button id="send" disabled>Send</button>
+        <button class="q" data-c="A" disabled>A</button>
+        <button class="q" data-c="L5" disabled>L5</button>
+        <button class="q" data-c="L10" disabled>L10</button>
+      </div>
+    </div>
+    <div class="box peaks">
+      <div class="note">Since connect / reset</div>
+      <div><span>max Iq</span><span id="p-iq">–</span></div>
+      <div><span>max FET</span><span id="p-fet">–</span></div>
+      <div><span>max motor</span><span id="p-mot">–</span></div>
+      <div><span>min battery</span><span id="p-vb">–</span></div>
+      <div><span>max speed</span><span id="p-sp">–</span></div>
+      <div><span>data lines logged</span><span id="p-n">0</span></div>
+      <div class="row"><button id="resetPeaks">Reset peaks</button></div>
+      <p class="note">Load test plan: stop if the FET goes above 60 °C (the firmware stops at 90 °C).</p>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const FIELDS = ["ms","thr","set","kmh","rads","iq","id","uq","ud","umax","ilim","fet","mot","vbus","flags"];
+let port = null, reader = null, writer = null, keepReading = false;
+const log = [];            // all data records: {pc, ...fields}
+let peaks = {};
+resetPeaks();
+
+if (!("serial" in navigator)) {
+  $("status").textContent = "this browser has no Web Serial - use Edge or Chrome";
+  $("connect").disabled = true;
+}
+
+$("connect").onclick = async () => {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+  } catch (e) { status("could not open the port: " + e.message); return; }
+  writer = port.writable.getWriter();
+  setConnected(true);
+  status("connected");
+  readLoop();
+};
+$("disconnect").onclick = disconnect;
+$("dataOn").onclick = () => send("D1");
+$("dataOff").onclick = () => send("D0");
+$("send").onclick = () => { const c = $("cmd").value.trim(); if (c) { send(c); $("cmd").value = ""; } };
+$("cmd").addEventListener("keydown", (e) => { if (e.key === "Enter") $("send").click(); });
+document.querySelectorAll("button.q").forEach((b) => b.onclick = () => send(b.dataset.c));
+$("save").onclick = saveCsv;
+$("resetPeaks").onclick = () => { resetPeaks(); showPeaks(); };
+
+function setConnected(on) {
+  $("connect").disabled = on;
+  ["disconnect","dataOn","dataOff","cmd","send"].forEach((id) => $(id).disabled = !on);
+  document.querySelectorAll("button.q").forEach((b) => b.disabled = !on);
+}
+function status(t) { $("status").textContent = t; }
+
+async function send(text) {
+  if (!writer) return;
+  await writer.write(new TextEncoder().encode(text + "\n"));
+  addConsole("> " + text);
+}
+
+async function disconnect() {
+  keepReading = false;
+  try { if (reader) await reader.cancel(); } catch (e) {}
+  try { if (writer) { writer.releaseLock(); } } catch (e) {}
+  try { if (port) await port.close(); } catch (e) {}
+  port = reader = writer = null;
+  setConnected(false);
+  status("not connected");
+}
+
+async function readLoop() {
+  keepReading = true;
+  const decoder = new TextDecoderStream();
+  const closed = port.readable.pipeTo(decoder.writable).catch(() => {});
+  reader = decoder.readable.getReader();
+  let buf = "";
+  try {
+    while (keepReading) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).replace(/\r$/, "");
+        buf = buf.slice(i + 1);
+        handleLine(line);
+      }
+    }
+  } catch (e) {
+    status("connection lost: " + e.message);
+  } finally {
+    try { reader.releaseLock(); } catch (e) {}
+    await closed;
+  }
+}
+
+function handleLine(line) {
+  if (line.startsWith("$D,")) {
+    const p = line.slice(3).split(",").map(Number);
+    if (p.length < FIELDS.length) return;
+    const r = { pc: Date.now() };
+    FIELDS.forEach((f, k) => r[f] = p[k]);
+    log.push(r);
+    updatePeaks(r);
+    updateTiles(r);
+    $("save").disabled = false;
+    return;
+  }
+  if (line.startsWith("STOPPED")) {
+    $("stopped").style.display = "block";
+    $("stopped").textContent = line + "  (see the board messages below)";
+  }
+  if (line.startsWith("=== ESC")) $("stopped").style.display = "none";   // board restarted
+  addConsole(line);
+}
+
+function addConsole(text) {
+  const c = $("console");
+  const d = document.createElement("div");
+  d.textContent = text;
+  if (/STOPPED|FAULT|refused|invalid/i.test(text) && !/faults: 0x0 0x0/.test(text)) d.className = "err";
+  const atBottom = c.scrollTop + c.clientHeight >= c.scrollHeight - 4;
+  c.appendChild(d);
+  while (c.childNodes.length > 400) c.removeChild(c.firstChild);
+  if (atBottom) c.scrollTop = c.scrollHeight;
+}
+
+// ---- tiles ------------------------------------------------------------------------------------------------
+function tile(id, value, sub, level) {
+  const t = $(id);
+  t.querySelector(".v").textContent = value;
+  if (sub !== undefined) t.querySelector(".s").textContent = sub;
+  t.classList.remove("ok", "warn", "bad");
+  if (level) t.classList.add(level);
+}
+const lvl = (x, warn, bad) => isNaN(x) ? "" : x >= bad ? "bad" : x >= warn ? "warn" : "ok";
+function updateTiles(r) {
+  const st = (r.flags & 1) ? "COAST" : "driving";
+  tile("t-speed", r.kmh.toFixed(1) + " km/h", "target " + r.set.toFixed(1) + " km/h · " + r.rads.toFixed(0) + " rad/s · " + st);
+  tile("t-thr", r.thr.toFixed(0) + " %", (r.flags & 4) ? ((r.flags & 2) ? "armed" : "NOT armed - release it") : "throttle off");
+  tile("t-iq", r.iq.toFixed(2) + " A", "limit " + r.ilim.toFixed(1) + " A · Id " + r.id.toFixed(2) + " A",
+       lvl(Math.abs(r.iq), 8, 10.5));
+  tile("t-fet", isNaN(r.fet) ? "–" : r.fet.toFixed(1) + " °C", "test limit 60 °C · stop 90 °C", lvl(r.fet, 50, 60));
+  tile("t-mot", isNaN(r.mot) ? "–" : r.mot.toFixed(1) + " °C", "stop at 100 °C", lvl(r.mot, 70, 85));
+  tile("t-vbus", r.vbus.toFixed(1) + " V", (r.vbus / 12).toFixed(2) + " V/cell (12S)",
+       r.vbus < 37.2 ? "bad" : r.vbus < 39.6 ? "warn" : "ok");
+  const frac = r.umax > 0 ? Math.hypot(r.uq, r.ud) / r.umax : 0;
+  tile("t-uq", r.uq.toFixed(1) + " / " + r.umax.toFixed(1) + " V", (frac * 100).toFixed(0) + " % of the cap",
+       frac >= 0.97 ? "bad" : frac >= 0.9 ? "warn" : "ok");
+}
+
+// ---- peaks ------------------------------------------------------------------------------------------------
+function resetPeaks() { peaks = { iq: -Infinity, fet: -Infinity, mot: -Infinity, vb: Infinity, sp: -Infinity }; }
+function updatePeaks(r) {
+  peaks.iq = Math.max(peaks.iq, Math.abs(r.iq));
+  if (!isNaN(r.fet)) peaks.fet = Math.max(peaks.fet, r.fet);
+  if (!isNaN(r.mot)) peaks.mot = Math.max(peaks.mot, r.mot);
+  if (r.vbus > 9) peaks.vb = Math.min(peaks.vb, r.vbus);
+  peaks.sp = Math.max(peaks.sp, r.kmh);
+  showPeaks();
+}
+function showPeaks() {
+  const f = (x, d, u) => isFinite(x) ? x.toFixed(d) + " " + u : "–";
+  $("p-iq").textContent = f(peaks.iq, 2, "A");
+  $("p-fet").textContent = f(peaks.fet, 1, "°C");
+  $("p-mot").textContent = f(peaks.mot, 1, "°C");
+  $("p-vb").textContent = f(peaks.vb, 1, "V");
+  $("p-sp").textContent = f(peaks.sp, 1, "km/h");
+  $("p-n").textContent = log.length;
+}
+
+// ---- charts -----------------------------------------------------------------------------------------------
+const charts = [
+  { id: "ch-speed", series: [["kmh", "--c1"], ["set", "--c2"]], min0: true },
+  { id: "ch-cur",   series: [["iq", "--c1"], ["id", "--c3"], ["ilim", "--c5"]], min0: false },
+  { id: "ch-temp",  series: [["fet", "--c5"], ["mot", "--c2"]], min0: false },
+  { id: "ch-volt",  series: [["vbus", "--c4"], ["uq", "--c1"], ["umax", "--c5"]], min0: true },
+];
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function draw() {
+  const winMs = Number($("win").value) * 1000;
+  const now = log.length ? log[log.length - 1].pc : Date.now();
+  let start = log.length;
+  while (start > 0 && log[start - 1].pc >= now - winMs) start--;
+  const data = log.slice(start);
+  for (const ch of charts) {
+    const cv = $(ch.id), dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    const g = cv.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const L = 40, R = 8, T = 6, B = 18, pw = w - L - R, ph = h - T - B;
+    let lo = Infinity, hi = -Infinity;
+    for (const r of data) for (const [k] of ch.series) { const v = r[k]; if (isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+    if (!isFinite(lo)) { lo = 0; hi = 1; }
+    if (ch.min0) lo = Math.min(lo, 0);
+    if (hi - lo < 1) { hi += 0.5; lo -= 0.5; }
+    const pad = (hi - lo) * 0.08; hi += pad; if (!ch.min0) lo -= pad;
+    const x = (t) => L + pw * (1 - (now - t) / winMs);
+    const y = (v) => T + ph * (1 - (v - lo) / (hi - lo));
+    g.strokeStyle = css("--grid"); g.fillStyle = css("--muted"); g.lineWidth = 1; g.font = "11px system-ui";
+    for (let k = 0; k <= 4; k++) {
+      const v = lo + (hi - lo) * k / 4, yy = Math.round(y(v)) + 0.5;
+      g.beginPath(); g.moveTo(L, yy); g.lineTo(w - R, yy); g.stroke();
+      g.fillText(v.toFixed(Math.abs(hi - lo) < 10 ? 1 : 0), 2, yy + 4);
+    }
+    g.fillText("-" + (winMs / 1000) + " s", L, h - 4);
+    g.fillText("now", w - R - 22, h - 4);
+    for (const [k, col] of ch.series) {
+      g.strokeStyle = css(col); g.lineWidth = 1.6; g.beginPath();
+      let pen = false;
+      for (const r of data) {
+        const v = r[k];
+        if (!isFinite(v)) { pen = false; continue; }
+        if (pen) g.lineTo(x(r.pc), y(v)); else { g.moveTo(x(r.pc), y(v)); pen = true; }
+      }
+      g.stroke();
+    }
+  }
+}
+setInterval(draw, 200);
+$("win").onchange = draw;
+
+// ---- CSV --------------------------------------------------------------------------------------------------
+function saveCsv() {
+  const head = ["pc_time_iso"].concat(FIELDS).join(",");
+  const rows = log.map((r) => [new Date(r.pc).toISOString()].concat(FIELDS.map((f) => r[f])).join(","));
+  const blob = new Blob([head + "\n" + rows.join("\n") + "\n"], { type: "text/csv" });
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  a.href = URL.createObjectURL(blob);
+  a.download = "esc-log-" + stamp + ".csv";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+</script>
+</body>
+</html>

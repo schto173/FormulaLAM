@@ -161,6 +161,15 @@ static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_L
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
 void doLimit(char *cmd) { float v = limitBase; command.scalar(&v, cmd); limitBase = constrain(v, 0.0f, LIMIT_CAP); }
+// "D1" / "D0": data mode for the PC dashboard (firmware/dashboard/esc-dashboard.html). Only prints values that
+// exist anyway; temperatures and Vbus are the ones temperatureTask measured last (no extra ADC reads).
+static bool dataOn = false;
+static float lastFet = NAN, lastMot = NAN, lastVb = NAN, lastLim = 0.0f;
+void doData(char *cmd) {
+  dataOn = (cmd[0] == '1');
+  Serial.println(dataOn ? "data mode ON (D0 = off): $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags"
+                        : "data mode OFF");
+}
 #if STAGE == 5
 static float mluLimit = FOC_VOLTAGE_MAX;             // "MLU<volts>" lowers the voltage cap for a test
 #endif
@@ -405,6 +414,7 @@ void setup() {
 
   command.add('T', doTarget, "target");
   command.add('L', doLimit, "limit (V in steps 3-4, A in step 5)");
+  command.add('D', doData, "data mode for the PC dashboard: D1 on, D0 off");
   command.add('M', doMotor, "motor");
 #if STAGE == 5
   command.add('A', doThrottle, "throttle: A1 on, A0 off, AI idle=now, AF full=now");
@@ -454,6 +464,7 @@ static void temperatureTask() {
   motor.voltage_limit = lim;
 #endif
   motor.PID_velocity.limit = lim;                    // velocity mode (MC1): its output is the torque command
+  lastFet = tf; lastMot = tm; lastVb = vb; lastLim = lim;
   if (motor.controller == MotionControlType::torque) motor.target = constrain(motor.target, -lim, lim);
   if (millis() - tp >= 1000) {
     tp = millis();
@@ -480,6 +491,30 @@ static void temperatureTask() {
   }
 }
 
+// Data mode: one line every 100 ms, numbers only. flags: 1 = COAST, 2 = throttle armed, 4 = throttle on.
+static void dataTask() {
+  static uint32_t t = 0;
+  if (!dataOn || millis() - t < 100) return;
+  t = millis();
+  float thr = 0.0f, set = 0.0f; int flags = 0;
+#if STAGE == 5
+  const float kmh = RADS_PER_KMH;
+  if (thrOn) { thr = thrPct; set = vSetKmh; flags |= 4; }
+  if (thrArmed) flags |= 2;
+  if (coasting) flags |= 1;
+#else
+  const float kmh = 1.0f;                            // no gearing known outside step 5: km/h fields = rad/s
+#endif
+  Serial.print("$D,"); Serial.print(t); Serial.print(',');
+  Serial.print(thr, 0); Serial.print(','); Serial.print(set, 1); Serial.print(',');
+  Serial.print(motor.shaft_velocity / kmh, 1); Serial.print(','); Serial.print(motor.shaft_velocity, 1); Serial.print(',');
+  Serial.print(motor.current.q, 2); Serial.print(','); Serial.print(motor.current.d, 2); Serial.print(',');
+  Serial.print(motor.voltage.q, 2); Serial.print(','); Serial.print(motor.voltage.d, 2); Serial.print(',');
+  Serial.print(motor.voltage_limit, 1); Serial.print(','); Serial.print(lastLim, 1); Serial.print(',');
+  Serial.print(lastFet, 1); Serial.print(','); Serial.print(lastMot, 1); Serial.print(',');
+  Serial.print(lastVb, 1); Serial.print(','); Serial.println(flags);
+}
+
 void loop() {
   motor.loopFOC();
   motor.move();
@@ -492,6 +527,7 @@ void loop() {
   noRegenTask();
   busTask();
   temperatureTask();
+  dataTask();
   if (drv::faultActive()) halt("DRV8353 nFAULT");
   blink();
 }
