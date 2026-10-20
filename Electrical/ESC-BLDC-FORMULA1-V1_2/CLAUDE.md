@@ -69,7 +69,7 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     Firmware since then: `MLU_MAX_FRACTION` 0.45 (was 0.55); scope the phase nodes / SPx at 45 V before high speed.
   - **Drive concept decided (2026-10-15), efficiency car, not performance:** throttle = maximum speed 0–40 km/h,
     P speed controller → current 0–10 A (hard, never more), ramp +2 A/s (soft freewheel engagement), never
-    negative (freewheel hub, no braking), released = coast, COAST once stopped. Gear 8:1 / wheel 0.508 m assumed
+    negative (freewheel hub, no braking), released = coast, COAST once stopped. Gear 8:1 (confirmed 2026-10-20) / wheel 0.508 m assumed
     (to confirm). Voltage cap 17 V but ≤ 0.40 × Vbus. Protections after board #1: total |U| limit (CappedMotor),
     DRV8353 in 3x PWM mode as on TI's EVM (DRV makes low side + dead time, INLx = phase enable; was 6x), IDRIVE 50/100 mA (TI rule IDRIVE = Qgd / 100-300 ns edge, 2026-10-19; was 150/300, then 100/200), OCP latched at VDS 0.3 V (was auto-retry 0.4 V), sine PWM, hall smoothing ON again (2026-10-20; was off after board #1 without a specific reason),
     hard stops (FET 90 °C, motor 100 °C, pack < 36 V for 2 s). Next: board #2 bring-up, then scope the phase

@@ -67,7 +67,7 @@
 // while the motor is slower than the target; never negative (no braking - the freewheel hub can't pass it on).
 // The current rises at most CURRENT_RAMP_A_S (soft freewheel engagement) and drops at once. Released = 0 A,
 // the motor spins down, the car rolls; once the motor stands still the DRV goes to COAST (all FETs off).
-#define GEAR_RATIO        8.0f    // motor turns per wheel turn                       <- CONFIRM
+#define GEAR_RATIO        8.0f    // motor turns per wheel turn (confirmed 2026-10-20)
 #define WHEEL_DIAMETER_M  0.508f  // outer diameter with tyre (20" is often 0.48-0.50) <- CONFIRM
 #define SPEED_MAX_KMH     40.0f   // throttle 100 %
 #define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
