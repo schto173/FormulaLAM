@@ -7,8 +7,11 @@
 // The 7070 has only ~0.054 Ohm + ~0.01 Ohm FET/shunt/wire, and at standstill nothing but that resistance
 // limits the current: 0.5 V ~ 8-10 A in the windings, 3 V would be ~50 A and collapse a current-limited
 // bench supply below the 16.8 V UVLO of the 5 V regulator (Nucleo resets).
-#define ALIGN_VOLTAGE     0.4f    // V used to align the halls in step 4 (raise in 0.1 V steps if it does not move)
-#define VOLTAGE_LIMIT     0.5f    // V max applied to the motor in steps 3-5 (in step 5 this also caps the speed)
+// 3x PWM + IDRIVE 50/100 mA: every switching edge is slower and the DRV waits for the opposite FET (VGS
+// handshake), so small voltages lose ~0.3-0.4 V at 24 V (~0.6-0.7 V at 45 V). Board #2, 2026-10-20: open loop
+// only rocked at 0.5 V, ran perfectly at 1.0 V. Current control (step 5) compensates this by itself.
+#define ALIGN_VOLTAGE     0.8f    // V used to align the halls in steps 4-5 on the bench (was 0.4 in 6x mode)
+#define VOLTAGE_LIMIT     1.0f    // V max applied to the motor in steps 3-4 (was 0.5 in 6x mode)
 #define CURRENT_LIMIT     10.0f   // A motor current, HARD maximum in step 5 ("L" can only lower it)
 #define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the cap below
 #define FOC_VOLTAGE_MAX   17.0f   // V motor voltage cap (enough for 40 km/h); never above FOC_MAX_FRACTION x Vbus
@@ -45,7 +48,7 @@
 #define BUS_OV_LIMIT      (BATTERY_CELLS * 4.20f + 5.0f)  // 12S: 55.4 V (full 50.4 V + margin; TVS stand-off 60 V)
 #define BUS_START_MAX     (BATTERY_CELLS * 4.30f)         // 12S: 51.6 V - above: wrong pack, refuse to start
 #define BUS_UV_STOP       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - below for more than 2 s: stop (empty)
-#define ALIGN_V_BUS       0.6f    // V for hall + current-sense alignment: the dead time eats ~0.2 V at 50 V
+#define ALIGN_V_BUS       1.2f    // V for hall + current-sense alignment on the pack (~0.6-0.7 V lost at 45 V)
 #else
 #define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
 #define BUS_START_MAX     35.0f
