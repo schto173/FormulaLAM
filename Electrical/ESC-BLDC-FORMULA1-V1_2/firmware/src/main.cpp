@@ -187,6 +187,7 @@ void doMotor(char *cmd) {
 }
 
 static bool pwmReady = false;
+static bool drvReady = false;                        // DRV8353 enabled and configured (SPI answers)
 static void halt(const char *why) {
   // snapshot first, then PWM off, then read the faults - while EN is still HIGH: once EN is low the DRV8353
   // sleeps, SPI doesn't answer and the SDO pull-up makes every fault bit read as 1 (0x7FF)
@@ -197,7 +198,9 @@ static void halt(const char *why) {
   Serial.print("  at: speed "); Serial.print(sp, 1); Serial.print(" rad/s | Uq "); Serial.print(uq, 2);
   Serial.print(" V | Iq "); Serial.print(iq, 2); Serial.print(" A | Vbus "); Serial.print(vb, 1);
   Serial.print(" V | nFAULT "); Serial.println(nf ? "LOW" : "high");
-  drv::printFaults(Serial);
+  // before drv::begin() the DRV is still asleep: SPI would read all 1s (a fake list of every fault)
+  if (drvReady) drv::printFaults(Serial);
+  else Serial.println("  (DRV8353 not started yet - no fault data, nothing was switched)");
   digitalWrite(PIN_DRV_EN, LOW);
   while (true) { digitalWrite(PIN_LED, !digitalRead(PIN_LED)); delay(100); }
 }
@@ -332,6 +335,7 @@ void setup() {
   if (vbus < BUS_UV_STOP) halt("battery below 3.0 V per cell (or not the configured cell count)");
 #endif
   if (!drv::begin(Serial)) halt("DRV8353 does not answer on SPI - run step 1");
+  drvReady = true;
 
   driver.voltage_power_supply = vbus;
   // NOT the motor limit: SimpleFOC centres the phase voltages at driver.voltage_limit / 2. With 0.5 V here the
