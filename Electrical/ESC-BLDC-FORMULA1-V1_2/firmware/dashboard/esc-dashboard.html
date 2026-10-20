@@ -9,6 +9,7 @@
   click "Connect", pick the Nucleo's COM port, then "Data ON" (sends D1: one $D line every 100 ms).
   Close the VS Code serial monitor first - only one program can use the COM port.
   Data line: $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags  (flags 1 COAST, 2 armed, 4 thr on)
+  Layout: everything fits one screen (from ~1280 x 720), no page scrolling; only the message window scrolls.
 -->
 <style>
 :root {
@@ -24,48 +25,61 @@
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
-header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel);
-  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
-header h1 { font-size: 16px; margin: 0 12px 0 0; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.3 system-ui, "Segoe UI", sans-serif;
+  display: flex; flex-direction: column; overflow: hidden; }
+header { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; margin: 0 8px 0 0; }
 button, select, input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
-  border-radius: 6px; padding: 5px 10px; }
+  border-radius: 5px; padding: 3px 8px; }
 button { cursor: pointer; }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-button:disabled { opacity: .45; cursor: default; }
+button:disabled, input:disabled { opacity: .45; cursor: default; }
 #status { color: var(--muted); margin-left: auto; }
-main { padding: 12px 16px; display: grid; gap: 12px; }
-#stopped { display: none; background: var(--bad); color: #fff; padding: 10px 14px; border-radius: 8px; font-weight: 600; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.tile .k { color: var(--muted); font-size: 12px; }
-.tile .v { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.tile .s { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(300px, 340px) 1fr; gap: 8px;
+  padding: 8px; }
+.left, .right { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; }
+.cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+/* tiles */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; }
+.tile .k { color: var(--muted); font-size: 11px; }
+.tile .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.tile .s { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.tile.wide { grid-column: span 2; }
 .tile.ok .v { color: var(--ok); } .tile.warn .v { color: var(--warn); } .tile.bad .v { color: var(--bad); }
-.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; }
-.chart { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-.chart .title { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-.chart .title b { color: var(--ink); font-weight: 600; margin-right: 4px; }
-.sw { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
-canvas { width: 100%; height: 170px; display: block; }
-.bottom { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
-.box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-#console { height: 220px; overflow-y: auto; font: 12px/1.35 ui-monospace, Consolas, monospace; white-space: pre-wrap;
-  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+/* controls */
+.ctl .row { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.ctl .lbl { width: 62px; color: var(--muted); font-size: 12px; }
+.ctl input[type=number] { width: 58px; }
+button.stop { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 700; flex: 1; padding: 6px; }
+button.go { flex: 1; padding: 6px; }
+/* peaks */
+.peaks { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; font-variant-numeric: tabular-nums; }
+.peaks div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 1px 0; }
+.peaks span:first-child { color: var(--muted); }
+/* charts */
+.charts { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  gap: 8px; }
+.chart { min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 7px; padding: 4px 8px; }
+.chart .title { flex: 0 0 auto; display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.chart .title b { color: var(--ink); font-weight: 600; }
+.sw { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 3px; border-radius: 2px; }
+canvas { flex: 1 1 0; min-height: 0; width: 100%; display: block; }
+/* console */
+.msgs { flex: 0 0 23%; min-height: 110px; display: flex; flex-direction: column; }
+#console { flex: 1 1 0; min-height: 0; overflow-y: auto; font: 11px/1.3 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
 #console .err { color: var(--bad); font-weight: 600; }
-.row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-.row input { flex: 1; min-width: 120px; }
-.peaks div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 3px 0;
-  font-variant-numeric: tabular-nums; }
-.note { color: var(--muted); font-size: 12px; }
-.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
-.ctl { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.ctl h3 { margin: 0 0 6px; font-size: 13px; }
-.ctl .row { margin-top: 6px; align-items: center; }
-.ctl input[type=number] { width: 80px; flex: 0 0 auto; }
-button.stop { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 700; padding: 10px 16px; }
-button.sel { outline: 2px solid var(--accent); }
-@media (max-width: 760px) { .bottom { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
+.msgs .row { display: flex; gap: 4px; margin-top: 4px; }
+.msgs .row input { flex: 1; }
+#stopped { display: none; position: fixed; top: 46px; left: 50%; transform: translateX(-50%); z-index: 5;
+  background: var(--bad); color: #fff; padding: 8px 14px; border-radius: 7px; font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3); max-width: 90vw; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -73,103 +87,78 @@ button.sel { outline: 2px solid var(--accent); }
   <h1>ESC Dashboard</h1>
   <button id="connect" class="primary">Connect</button>
   <button id="disconnect" disabled>Disconnect</button>
-  <button id="dataOn" disabled>Data ON (D1)</button>
-  <button id="dataOff" disabled>Data OFF (D0)</button>
-  <label class="note">window
-    <select id="win"><option value="30">30 s</option><option value="60" selected>60 s</option>
-      <option value="180">3 min</option><option value="600">10 min</option></select></label>
-  <button id="save" disabled>Save CSV</button>
+  <button id="dataOn" disabled title="D1: one data line every 100 ms">Data ON</button>
+  <button id="dataOff" disabled title="D0">Data OFF</button>
+  <select id="win" title="graph time window"><option value="30">30 s</option><option value="60" selected>60 s</option>
+    <option value="180">3 min</option><option value="600">10 min</option></select>
+  <button id="save" disabled title="every data line with a PC time stamp">Save CSV</button>
   <span id="status">not connected</span>
 </header>
+<div id="stopped" title="click to hide"></div>
 <main>
-  <div id="stopped"></div>
-  <div class="tiles">
-    <div class="tile" id="t-speed"><div class="k">Motor speed</div><div class="v">–</div><div class="s">target –</div></div>
-    <div class="tile" id="t-thr"><div class="k">Throttle</div><div class="v">–</div><div class="s">–</div></div>
-    <div class="tile" id="t-iq"><div class="k">Motor current Iq</div><div class="v">–</div><div class="s">limit –</div></div>
-    <div class="tile" id="t-fet"><div class="k">FET temperature</div><div class="v">–</div><div class="s">stop at 90 °C</div></div>
-    <div class="tile" id="t-mot"><div class="k">Motor temperature</div><div class="v">–</div><div class="s">stop at 100 °C</div></div>
-    <div class="tile" id="t-vbus"><div class="k">Battery</div><div class="v">–</div><div class="s">–</div></div>
-    <div class="tile" id="t-uq"><div class="k">Uq / cap</div><div class="v">–</div><div class="s">–</div></div>
-  </div>
-  <div class="controls">
-    <div class="ctl">
-      <h3>Motor</h3>
+  <div class="left">
+    <div class="tiles">
+      <div class="tile wide" id="t-speed"><div class="k">Motor speed</div><div class="v">–</div><div class="s">target –</div></div>
+      <div class="tile" id="t-thr"><div class="k">Throttle</div><div class="v">–</div><div class="s">–</div></div>
+      <div class="tile" id="t-iq"><div class="k">Current Iq</div><div class="v">–</div><div class="s">limit –</div></div>
+      <div class="tile" id="t-fet" title="load test: stop above 60 °C, firmware stops at 90 °C"><div class="k">FET temp</div><div class="v">–</div><div class="s">test limit 60 °C</div></div>
+      <div class="tile" id="t-mot" title="firmware stops at 100 °C"><div class="k">Motor temp</div><div class="v">–</div><div class="s">stop at 100 °C</div></div>
+      <div class="tile" id="t-vbus"><div class="k">Battery</div><div class="v">–</div><div class="s">–</div></div>
+      <div class="tile" id="t-uq" title="total motor voltage vs. the cap - should stay well below 90 %"><div class="k">Uq / cap</div><div class="v">–</div><div class="s">–</div></div>
+    </div>
+    <div class="panel ctl">
+      <div class="cap">Controls</div>
       <div class="row">
-        <button class="stop c" data-c="A0|ME0" disabled title="throttle off + driver off: all FETs open, the motor coasts">STOP motor</button>
-        <button class="c" data-c="ME1|A1" disabled title="driver on + throttle on (release the throttle once to arm it)">Enable again</button>
+        <button class="stop c" data-c="A0|ME0" disabled title="sends A0 + ME0: throttle off, all FETs off, the motor coasts. The plug / fuse stays the real emergency stop.">STOP motor</button>
+        <button class="go c" data-c="ME1|A1" disabled title="sends ME1 + A1: driver on (only at standstill), throttle on - release it once to arm">Enable again</button>
       </div>
-      <p class="note">Software stop (sends A0 + ME0): all FETs off, the motor coasts. Your supply switch / fuse
-        stays the real emergency stop. "Enable again" sends ME1 + A1; release the throttle once to arm it.</p>
-    </div>
-    <div class="ctl">
-      <h3>Current limit (max 10 A)</h3>
-      <div class="row">
-        <button class="c lim" data-c="L2" disabled>2 A</button>
-        <button class="c lim" data-c="L5" disabled>5 A</button>
-        <button class="c lim" data-c="L8" disabled>8 A</button>
-        <button class="c lim" data-c="L10" disabled>10 A</button>
-      </div>
-      <div class="row"><input id="limVal" type="number" min="0" max="10" step="0.5" value="5" disabled>
-        <span class="note">A</span><button id="limSet" disabled>Set</button></div>
-      <p class="note">Throttle 100 % never asks for more than this (L command).</p>
-    </div>
-    <div class="ctl">
-      <h3>Voltage cap (max 17 V, ≤ 0.40 × battery)</h3>
-      <div class="row"><input id="capVal" type="number" min="1" max="17" step="0.5" value="17" disabled>
-        <span class="note">V</span><button id="capSet" disabled>Set</button></div>
-      <p class="note">Lower = lower top speed (MLU command). Only lowered while the motor stands still - the board
-        refuses it while spinning (that would brake into the supply).</p>
-    </div>
-    <div class="ctl">
-      <h3>Throttle</h3>
-      <div class="row">
-        <button class="c" data-c="A1" disabled>On</button>
-        <button class="c" data-c="A0" disabled>Off</button>
+      <div class="row"><span class="lbl" title="L command: throttle 100 % never asks for more">Current</span>
+        <button class="c lim" data-c="L2" disabled>2</button><button class="c lim" data-c="L5" disabled>5</button>
+        <button class="c lim" data-c="L8" disabled>8</button><button class="c lim" data-c="L10" disabled>10</button>
+        <input id="limVal" type="number" min="0" max="10" step="0.5" value="5" disabled><button id="limSet" disabled>A</button></div>
+      <div class="row"><span class="lbl" title="MLU command: lower = lower top speed; refused while spinning; max 17 V and never above 0.40 x battery">V cap</span>
+        <input id="capVal" type="number" min="1" max="17" step="0.5" value="17" disabled><button id="capSet" disabled>Set V</button></div>
+      <div class="row"><span class="lbl">Throttle</span>
+        <button class="c" data-c="A1" disabled>On</button><button class="c" data-c="A0" disabled>Off</button>
         <button class="c" data-c="A" disabled>Status</button>
+        <button class="c" data-c="AI" disabled title="hold the throttle fully released, then click">Cal 0</button>
+        <button class="c" data-c="AF" disabled title="hold the throttle fully pressed, then click">Cal 100</button></div>
+    </div>
+    <div class="panel">
+      <div class="cap">Peaks since connect <button id="resetPeaks" style="float:right;padding:0 6px;font-size:11px">reset</button></div>
+      <div class="peaks">
+        <div><span>max Iq</span><span id="p-iq">–</span></div>
+        <div><span>max FET</span><span id="p-fet">–</span></div>
+        <div><span>max speed</span><span id="p-sp">–</span></div>
+        <div><span>max motor</span><span id="p-mot">–</span></div>
+        <div><span>min battery</span><span id="p-vb">–</span></div>
+        <div><span>lines</span><span id="p-n">0</span></div>
       </div>
-      <div class="row">
-        <button class="c" data-c="AI" disabled title="hold the throttle fully released, then click">Calibrate: released</button>
-        <button class="c" data-c="AF" disabled title="hold the throttle fully pressed, then click">Calibrate: full</button>
-      </div>
-      <p class="note">Calibration is lost at reset - note the printed volts for board.h.</p>
     </div>
   </div>
-  <div class="charts">
-    <div class="chart"><div class="title"><b>Speed</b>
-      <span><i class="sw" style="background:var(--c1)"></i>motor km/h</span>
-      <span><i class="sw" style="background:var(--c2)"></i>target km/h</span></div><canvas id="ch-speed"></canvas></div>
-    <div class="chart"><div class="title"><b>Current</b>
-      <span><i class="sw" style="background:var(--c1)"></i>Iq A</span>
-      <span><i class="sw" style="background:var(--c3)"></i>Id A</span>
-      <span><i class="sw" style="background:var(--c5)"></i>limit A</span></div><canvas id="ch-cur"></canvas></div>
-    <div class="chart"><div class="title"><b>Temperature</b>
-      <span><i class="sw" style="background:var(--c5)"></i>FET °C</span>
-      <span><i class="sw" style="background:var(--c2)"></i>motor °C</span></div><canvas id="ch-temp"></canvas></div>
-    <div class="chart"><div class="title"><b>Voltage</b>
-      <span><i class="sw" style="background:var(--c4)"></i>battery V</span>
-      <span><i class="sw" style="background:var(--c1)"></i>Uq V</span>
-      <span><i class="sw" style="background:var(--c5)"></i>cap V</span></div><canvas id="ch-volt"></canvas></div>
-  </div>
-  <div class="bottom">
-    <div class="box">
-      <div class="note">Board messages (status lines, start-up, errors)</div>
+  <div class="right">
+    <div class="charts">
+      <div class="chart"><div class="title"><b>Speed</b>
+        <span><i class="sw" style="background:var(--c1)"></i>motor km/h</span>
+        <span><i class="sw" style="background:var(--c2)"></i>target km/h</span></div><canvas id="ch-speed"></canvas></div>
+      <div class="chart"><div class="title"><b>Current</b>
+        <span><i class="sw" style="background:var(--c1)"></i>Iq A</span>
+        <span><i class="sw" style="background:var(--c3)"></i>Id A</span>
+        <span><i class="sw" style="background:var(--c5)"></i>limit A</span></div><canvas id="ch-cur"></canvas></div>
+      <div class="chart"><div class="title"><b>Temperature</b>
+        <span><i class="sw" style="background:var(--c5)"></i>FET °C</span>
+        <span><i class="sw" style="background:var(--c2)"></i>motor °C</span></div><canvas id="ch-temp"></canvas></div>
+      <div class="chart"><div class="title"><b>Voltage</b>
+        <span><i class="sw" style="background:var(--c4)"></i>battery V</span>
+        <span><i class="sw" style="background:var(--c1)"></i>Uq V</span>
+        <span><i class="sw" style="background:var(--c5)"></i>cap V</span></div><canvas id="ch-volt"></canvas></div>
+    </div>
+    <div class="panel msgs">
       <div id="console"></div>
       <div class="row">
         <input id="cmd" placeholder="command, e.g. A, L5, MLU12 - Enter sends" disabled>
         <button id="send" disabled>Send</button>
       </div>
-    </div>
-    <div class="box peaks">
-      <div class="note">Since connect / reset</div>
-      <div><span>max Iq</span><span id="p-iq">–</span></div>
-      <div><span>max FET</span><span id="p-fet">–</span></div>
-      <div><span>max motor</span><span id="p-mot">–</span></div>
-      <div><span>min battery</span><span id="p-vb">–</span></div>
-      <div><span>max speed</span><span id="p-sp">–</span></div>
-      <div><span>data lines logged</span><span id="p-n">0</span></div>
-      <div class="row"><button id="resetPeaks">Reset peaks</button></div>
-      <p class="note">Load test plan: stop if the FET goes above 60 °C (the firmware stops at 90 °C).</p>
     </div>
   </div>
 </main>
@@ -215,6 +204,7 @@ $("capSet").onclick = () => {
   $("capVal").value = v; send("MLU" + v);
 };
 $("save").onclick = saveCsv;
+$("stopped").onclick = () => $("stopped").style.display = "none";
 $("resetPeaks").onclick = () => { resetPeaks(); showPeaks(); };
 
 function setConnected(on) {
@@ -280,7 +270,7 @@ function handleLine(line) {
   }
   if (line.startsWith("STOPPED")) {
     $("stopped").style.display = "block";
-    $("stopped").textContent = line + "  (see the board messages below)";
+    $("stopped").textContent = line + "  (details in the messages - click to hide)";
   }
   if (line.startsWith("=== ESC")) $("stopped").style.display = "none";   // board restarted
   addConsole(line);
