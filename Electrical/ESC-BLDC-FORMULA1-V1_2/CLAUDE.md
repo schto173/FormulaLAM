@@ -83,6 +83,9 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     first run: (1) it whistled at ~200 rad/s = the 10 V cap (Uq 9.4 of 10 V) - effective Ke is 0.048 in 3x mode,
     so the speed target limit now uses 0.050 + 1.5 V reserve; (2) the current PI wound up to ~10 V while in
     COAST - now held at 0 during COAST and the PWM set to 0 V before leaving it.
+    Re-test ok: Uq 0.00 V in COAST, clean start, full throttle 19.1 km/h (167 rad/s) at Uq 8.3 V of a 10 V cap,
+    no whistle, FET 24.7 C flat. **Board #2 bench bring-up (steps 1-5, 3x PWM) done.** Next: pack (`5_foc_battery`)
+    with the scope on a phase pad at moderate speed, then load up to 10 A.
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
     ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
