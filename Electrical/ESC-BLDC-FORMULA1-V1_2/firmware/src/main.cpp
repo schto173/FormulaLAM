@@ -272,8 +272,8 @@ static void throttleTask() {
     }
     return;
   }
-  // highest speed the voltage cap can deliver (1 V reserve for the winding resistance at 10 A)
-  vMaxKmh = constrain((motor.voltage_limit - 1.0f) / KE_V_PER_RADS / RADS_PER_KMH, 0.0f, SPEED_MAX_KMH);
+  // highest speed the voltage cap can deliver, with SPEED_V_RESERVE left free (never drive into the cap)
+  vMaxKmh = constrain((motor.voltage_limit - SPEED_V_RESERVE) / KE_V_PER_RADS / RADS_PER_KMH, 0.0f, SPEED_MAX_KMH);
   vSetKmh = x * vMaxKmh;
   float vKmh = motor.shaft_velocity / RADS_PER_KMH;
   float want = (x > 0.0f) ? constrain(SPEED_P_A_PER_KMH * (vSetKmh - vKmh), 0.0f, limitBase) : 0.0f;
@@ -289,10 +289,17 @@ static bool coasting = false;
 static void setCoast(bool on) {
   if (on == coasting) return;
   coasting = on;
-  if (!on) { motor.PID_current_q.reset(); motor.PID_current_d.reset(); }
+  if (!on) {
+    // the PWM keeps running under COAST: start from 0 V, not from the last duty cycle
+    motor.PID_current_q.reset(); motor.PID_current_d.reset();
+    motor.setPhaseVoltage(0.0f, 0.0f, motor.electrical_angle);
+  }
   drv::write(drv::DRV_CTRL, drv::DRV_CTRL_BASE | (on ? 0x004 : 0x000));   // bit 2 = COAST, keep 3x PWM mode
 }
 static void coastTask() {
+  // while coasting no current flows, but the current PI keeps integrating a tiny measuring offset and crept up
+  // to the cap (Uq ~10 V on board #2) - hold it at 0 the whole time
+  if (coasting) { motor.PID_current_q.reset(); motor.PID_current_d.reset(); }
   float v = fabsf(motor.shaft_velocity);
   bool released = !thrOn || iCmd <= 0.0f;
   if (!thrOn) { setCoast(false); return; }            // T commands: behave as before

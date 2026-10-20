@@ -75,7 +75,12 @@
 #define SPEED_MAX_KMH     40.0f   // throttle 100 %
 #define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
 #define CURRENT_RAMP_A_S  2.0f    // A/s the current may rise
-#define KE_V_PER_RADS     0.045f  // measured back-EMF: Uq per rad/s of motor speed (2026-10-14, coasting)
+// Uq needed per rad/s of motor speed, for the speed target limit. Coasting (Iq ~ 0): 6x PWM board #1 0.045;
+// 3x PWM + IDRIVE 50/100 board #2 0.048 (8.33 V @ 172 rad/s, 4.44 V @ 93) - the slower edges cost voltage.
+// 0.050 + SPEED_V_RESERVE keep the target clearly below the cap: at the cap the current loop saturated and
+// whistled (board #2, ~200 rad/s at a 10 V cap, 2026-10-20).
+#define KE_V_PER_RADS     0.050f
+#define SPEED_V_RESERVE   1.5f    // V kept free below the cap (winding resistance at 10 A + margin)
 
 // ---- temperature protection (steps 3-5): hard stop, no derating ---------------------------------------------
 #define FET_TEMP_STOP     90.0f   // C, NTC TH1 on the board next to Q4

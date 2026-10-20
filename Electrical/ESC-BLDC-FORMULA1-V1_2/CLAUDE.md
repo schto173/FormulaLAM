@@ -77,6 +77,12 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   - **Board #2 (new board, 2026-10-20)**, firmware with 3x PWM / IDRIVE 50-100 / OCP latched: step 1 ok - all
     registers ok (0x311, 0x711, 0x116, 0x280, 0x20), faults 0x0 0x0 at 18.5 V. **VGLS across C29 = 12.1 V** (healthy
     reference; dead board #1: 3 V).
+    Steps 2-5 ok on the bench (24 V): halls 42 steps; open loop only rocked at 0.5 V, perfect at 1.0 V (3x PWM +
+    slow edges cost ~0.3-0.4 V); step 5 current-sense align `Success: 1`, sensor dir CW (other phase order than
+    #1), speed control tracks the throttle target within ~0.3 km/h at 0.2-1.2 A no-load. Two fixes after the
+    first run: (1) it whistled at ~200 rad/s = the 10 V cap (Uq 9.4 of 10 V) - effective Ke is 0.048 in 3x mode,
+    so the speed target limit now uses 0.050 + 1.5 V reserve; (2) the current PI wound up to ~10 V while in
+    COAST - now held at 0 during COAST and the PWM set to 0 V before leaving it.
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
     ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
