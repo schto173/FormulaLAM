@@ -174,6 +174,16 @@ void doData(char *cmd) {
 static float mluLimit = FOC_VOLTAGE_MAX;             // "MLU<volts>" lowers the voltage cap for a test
 #endif
 void doMotor(char *cmd) {
+  // "ME1" (driver on again after "ME0"): SimpleFOC's enable() calls setPwm(0,0,0) = all low sides on for a moment,
+  // which would brake a spinning motor -> only at standstill. (enable() resets the PIDs itself; we do it too.)
+  if (cmd[0] == 'E' && cmd[1] && cmd[1] != '0') {
+    if (fabsf(motor.shaft_velocity) > 1.0f) {
+      Serial.println("refused: enable only when the motor stands still - wait until it has stopped");
+      return;
+    }
+    motor.target = 0.0f;
+    motor.PID_current_q.reset(); motor.PID_current_d.reset();
+  }
   // "MLU<volts>": lower the voltage cap for a test; never above FOC_VOLTAGE_MAX
   if (cmd[0] == 'L' && cmd[1] == 'U' && cmd[2]) {
     float v = atof(cmd + 2);

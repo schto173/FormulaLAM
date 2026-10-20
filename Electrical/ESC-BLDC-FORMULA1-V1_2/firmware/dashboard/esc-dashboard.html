@@ -58,6 +58,13 @@ canvas { width: 100%; height: 170px; display: block; }
 .peaks div { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--line); padding: 3px 0;
   font-variant-numeric: tabular-nums; }
 .note { color: var(--muted); font-size: 12px; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.ctl { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.ctl h3 { margin: 0 0 6px; font-size: 13px; }
+.ctl .row { margin-top: 6px; align-items: center; }
+.ctl input[type=number] { width: 80px; flex: 0 0 auto; }
+button.stop { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 700; padding: 10px 16px; }
+button.sel { outline: 2px solid var(--accent); }
 @media (max-width: 760px) { .bottom { grid-template-columns: 1fr; } .charts { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -85,6 +92,49 @@ canvas { width: 100%; height: 170px; display: block; }
     <div class="tile" id="t-vbus"><div class="k">Battery</div><div class="v">–</div><div class="s">–</div></div>
     <div class="tile" id="t-uq"><div class="k">Uq / cap</div><div class="v">–</div><div class="s">–</div></div>
   </div>
+  <div class="controls">
+    <div class="ctl">
+      <h3>Motor</h3>
+      <div class="row">
+        <button class="stop c" data-c="A0|ME0" disabled title="throttle off + driver off: all FETs open, the motor coasts">STOP motor</button>
+        <button class="c" data-c="ME1|A1" disabled title="driver on + throttle on (release the throttle once to arm it)">Enable again</button>
+      </div>
+      <p class="note">Software stop (sends A0 + ME0): all FETs off, the motor coasts. Your supply switch / fuse
+        stays the real emergency stop. "Enable again" sends ME1 + A1; release the throttle once to arm it.</p>
+    </div>
+    <div class="ctl">
+      <h3>Current limit (max 10 A)</h3>
+      <div class="row">
+        <button class="c lim" data-c="L2" disabled>2 A</button>
+        <button class="c lim" data-c="L5" disabled>5 A</button>
+        <button class="c lim" data-c="L8" disabled>8 A</button>
+        <button class="c lim" data-c="L10" disabled>10 A</button>
+      </div>
+      <div class="row"><input id="limVal" type="number" min="0" max="10" step="0.5" value="5" disabled>
+        <span class="note">A</span><button id="limSet" disabled>Set</button></div>
+      <p class="note">Throttle 100 % never asks for more than this (L command).</p>
+    </div>
+    <div class="ctl">
+      <h3>Voltage cap (max 17 V, ≤ 0.40 × battery)</h3>
+      <div class="row"><input id="capVal" type="number" min="1" max="17" step="0.5" value="17" disabled>
+        <span class="note">V</span><button id="capSet" disabled>Set</button></div>
+      <p class="note">Lower = lower top speed (MLU command). Only lowered while the motor stands still - the board
+        refuses it while spinning (that would brake into the supply).</p>
+    </div>
+    <div class="ctl">
+      <h3>Throttle</h3>
+      <div class="row">
+        <button class="c" data-c="A1" disabled>On</button>
+        <button class="c" data-c="A0" disabled>Off</button>
+        <button class="c" data-c="A" disabled>Status</button>
+      </div>
+      <div class="row">
+        <button class="c" data-c="AI" disabled title="hold the throttle fully released, then click">Calibrate: released</button>
+        <button class="c" data-c="AF" disabled title="hold the throttle fully pressed, then click">Calibrate: full</button>
+      </div>
+      <p class="note">Calibration is lost at reset - note the printed volts for board.h.</p>
+    </div>
+  </div>
   <div class="charts">
     <div class="chart"><div class="title"><b>Speed</b>
       <span><i class="sw" style="background:var(--c1)"></i>motor km/h</span>
@@ -108,9 +158,6 @@ canvas { width: 100%; height: 170px; display: block; }
       <div class="row">
         <input id="cmd" placeholder="command, e.g. A, L5, MLU12 - Enter sends" disabled>
         <button id="send" disabled>Send</button>
-        <button class="q" data-c="A" disabled>A</button>
-        <button class="q" data-c="L5" disabled>L5</button>
-        <button class="q" data-c="L10" disabled>L10</button>
       </div>
     </div>
     <div class="box peaks">
@@ -155,14 +202,25 @@ $("dataOn").onclick = () => send("D1");
 $("dataOff").onclick = () => send("D0");
 $("send").onclick = () => { const c = $("cmd").value.trim(); if (c) { send(c); $("cmd").value = ""; } };
 $("cmd").addEventListener("keydown", (e) => { if (e.key === "Enter") $("send").click(); });
-document.querySelectorAll("button.q").forEach((b) => b.onclick = () => send(b.dataset.c));
+document.querySelectorAll("button.c").forEach((b) => b.onclick = async () => {
+  for (const c of b.dataset.c.split("|")) await send(c);
+  if (b.classList.contains("lim")) $("limVal").value = b.dataset.c.slice(1);
+});
+$("limSet").onclick = () => {
+  const v = Math.min(10, Math.max(0, Number($("limVal").value)));
+  $("limVal").value = v; send("L" + v);
+};
+$("capSet").onclick = () => {
+  const v = Math.min(17, Math.max(0.5, Number($("capVal").value)));
+  $("capVal").value = v; send("MLU" + v);
+};
 $("save").onclick = saveCsv;
 $("resetPeaks").onclick = () => { resetPeaks(); showPeaks(); };
 
 function setConnected(on) {
   $("connect").disabled = on;
-  ["disconnect","dataOn","dataOff","cmd","send"].forEach((id) => $(id).disabled = !on);
-  document.querySelectorAll("button.q").forEach((b) => b.disabled = !on);
+  ["disconnect","dataOn","dataOff","cmd","send","limVal","limSet","capVal","capSet"].forEach((id) => $(id).disabled = !on);
+  document.querySelectorAll("button.c").forEach((b) => b.disabled = !on);
 }
 function status(t) { $("status").textContent = t; }
 
