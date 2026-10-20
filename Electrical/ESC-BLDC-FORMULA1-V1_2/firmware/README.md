@@ -58,13 +58,18 @@ limited to what the cap can deliver, so the controller never runs into the volta
 the cap for a test. The total voltage |Uq, Ud| is limited to the cap (`CappedMotor`), so the PWM never clips.
 
 ## PC dashboard
-`dashboard/esc-dashboard.html`: open it in **Edge or Chrome** (double-click, no install, no internet), close the
-VS Code serial monitor, click **Connect**, pick the Nucleo's COM port, then **Data ON (D1)**. It shows speed,
-throttle, current, FET/motor temperature, battery and Uq/cap as tiles (colours: FET amber from 50 °C, red from
-60 °C = the load-test limit), live graphs, peaks, the board's messages, a command box, and **Save CSV** (every data
-line with a PC time stamp). Firmware command `D1` = one `$D,...` line every 100 ms, `D0` = off (off after reset):
+`dashboard/esc-dashboard.html`: open it in **Edge or Chrome** (no install, works offline), close the VS Code serial
+monitor, **Connect**, pick the Nucleo's COM port, **Data ON** (sends `D1`). **Demo** plays synthetic data without
+a board. One screen from ~1280 x 720 (smaller windows scroll).
+- Instruments: speedometer (target needle), current and voltage-headroom dials, FET/motor/battery/throttle bars.
+- Graphs: speed, current, temperature, power & voltage; synchronized crosshair (hover), pause, named markers.
+- Efficiency (PC-side estimates): motor power 1.5 (Uq Iq + Ud Id), battery current, energy Wh, distance, Wh/km.
+- Controls: STOP (`A0`+`ME0`, also the Esc key), Enable (`ME1`+`A1`, standstill only), current limit `L`,
+  voltage cap `MLU`, throttle on/off/calibration. Every sent command is echoed in the message window.
+- Load-test guard (on by default, switchable): sends STOP once if the FET/motor temperature reaches the set
+  limit (60 / 85 °C), re-arms after cooling 5 °C. Save CSV: all data + derived values + markers.
+Firmware data line (`D1` = every 100 ms, `D0` off, off after reset):
 `$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags` (flags 1 COAST, 2 armed, 4 throttle on).
-Only prints existing values (temperatures/Vbus from the 200 ms measurement), changes nothing in the control.
 
 ## Bus protection (steps 3–5)
 A torque against the rotation makes the motor a generator; a bench supply cannot take that energy back and the
