@@ -74,6 +74,9 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     DRV8353 in 3x PWM mode as on TI's EVM (DRV makes low side + dead time, INLx = phase enable; was 6x), IDRIVE 50/100 mA (TI rule IDRIVE = Qgd / 100-300 ns edge, 2026-10-19; was 150/300, then 100/200), OCP latched at VDS 0.3 V (was auto-retry 0.4 V), sine PWM, hall smoothing ON again (2026-10-20; was off after board #1 without a specific reason),
     hard stops (FET 90 °C, motor 100 °C, pack < 36 V for 2 s). Next: board #2 bring-up, then scope the phase
     pads / low-side sources at 45 V and step the load up to 10 A.
+  - **Board #2 (new board, 2026-10-20)**, firmware with 3x PWM / IDRIVE 50-100 / OCP latched: step 1 ok - all
+    registers ok (0x311, 0x711, 0x116, 0x280, 0x20), faults 0x0 0x0 at 18.5 V. **VGLS across C29 = 12.1 V** (healthy
+    reference; dead board #1: 3 V).
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
     ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
