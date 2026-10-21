@@ -326,7 +326,7 @@ static void throttleTask() {
     if (!tStall) tStall = now;
     else if (now - tStall > STALL_TIME_MS) {
       tStall = 0; stalled = true; thrArmed = false; iCmd = 0.0f; motor.target = 0.0f;
-      Serial.println("# STALL: motor blocked (>= 5 A, not turning for 3 s) -> 0 A. Release the throttle to drive again.");
+      Serial.println("# STALL: motor blocked (>= 8 A, not turning for 3 s) -> 0 A. Release the throttle to drive again.");
       return;
     }
   } else tStall = 0;
