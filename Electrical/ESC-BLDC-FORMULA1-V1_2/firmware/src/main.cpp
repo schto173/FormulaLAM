@@ -249,6 +249,10 @@ static const float RADS_PER_KMH = GEAR_RATIO / (WHEEL_DIAMETER_M / 2.0f) / 3.6f;
 static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
 static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrPct = 0.0f;
 static float iCmd = 0.0f, vSetKmh = 0.0f, vMaxKmh = 0.0f;
+// drive direction: +1 normal, -1 reversed. Flips the sign of the current command and of the measured speed in
+// the drive logic only - speed limit, current limit, ramp, no-regen and COAST work the same both ways.
+static int driveDir = (MOTOR_DIRECTION < 0) ? -1 : 1;
+static float fwdVelocity() { return driveDir * motor.shaft_velocity; }   // rad/s, positive = forward
 static void thrOff(const char *why) { thrOn = false; iCmd = 0.0f; motor.target = 0.0f; Serial.println(why); }
 // "A1" on, "A0" off, "AI" idle = now, "AF" full = now, "A" status
 void doThrottle(char *cmd) {
@@ -270,6 +274,21 @@ void doThrottle(char *cmd) {
   Serial.print(" V | full "); Serial.print(thrFull, 2); Serial.print(" V | 100 % = "); Serial.print(SPEED_MAX_KMH, 0);
   Serial.print(" km/h | max "); Serial.print(limitBase, 1); Serial.print(" A, +"); Serial.print(CURRENT_RAMP_A_S, 1);
   Serial.println(" A/s");
+}
+// "R1" normal / "R0" reversed / "R" status - only at standstill with the throttle released
+void doDirection(char *cmd) {
+  if (cmd[0] == '0' || cmd[0] == '1') {
+    int want = (cmd[0] == '1') ? 1 : -1;
+    if (want != driveDir) {
+      if (fabsf(motor.shaft_velocity) > 1.0f || iCmd > 0.0f) {
+        Serial.println("refused: change direction only at standstill with the throttle released");
+        return;
+      }
+      driveDir = want;
+    }
+  }
+  Serial.print("direction: "); Serial.print(driveDir > 0 ? "normal" : "reversed");
+  Serial.print(" (board.h MOTOR_DIRECTION = "); Serial.print(MOTOR_DIRECTION); Serial.println(", used after a reset)");
 }
 static void throttleTask() {
   static uint32_t t = 0;
@@ -297,10 +316,10 @@ static void throttleTask() {
   // highest speed the voltage cap can deliver, with SPEED_V_RESERVE left free (never drive into the cap)
   vMaxKmh = constrain((motor.voltage_limit - SPEED_V_RESERVE) / KE_V_PER_RADS / RADS_PER_KMH, 0.0f, SPEED_MAX_KMH);
   vSetKmh = x * vMaxKmh;
-  float vKmh = motor.shaft_velocity / RADS_PER_KMH;
+  float vKmh = fwdVelocity() / RADS_PER_KMH;
   float want = (x > 0.0f) ? constrain(SPEED_P_A_PER_KMH * (vSetKmh - vKmh), 0.0f, limitBase) : 0.0f;
   iCmd = (want > iCmd) ? min(want, iCmd + CURRENT_RAMP_A_S * dt) : want;   // up: ramp, down: at once
-  motor.target = iCmd;
+  motor.target = driveDir * iCmd;
 }
 
 // Quiet standstill: throttle released and the motor (almost) stopped -> DRV8353 COAST bit = all six FETs off.
@@ -428,6 +447,7 @@ void setup() {
   command.add('M', doMotor, "motor");
 #if STAGE == 5
   command.add('A', doThrottle, "throttle: A1 on, A0 off, AI idle=now, AF full=now");
+  command.add('R', doDirection, "direction: R1 normal, R0 reversed (standstill only)");
 #endif
   motor.useMonitoring(Serial);
   motor.monitor_downsample = 0;                      // off: it floods the terminal (hundreds of lines/s).
@@ -490,7 +510,8 @@ static void temperatureTask() {
     if (thrOn) {
       Serial.print(" | thr "); Serial.print(thrArmed ? "" : "(not armed) "); Serial.print(thrPct, 0);
       Serial.print(" % -> "); Serial.print(vSetKmh, 1); Serial.print(" km/h (max "); Serial.print(vMaxKmh, 0);
-      Serial.print(") | motor = "); Serial.print(motor.shaft_velocity / RADS_PER_KMH, 1); Serial.print(" km/h");
+      Serial.print(") | motor = "); Serial.print(fwdVelocity() / RADS_PER_KMH, 1); Serial.print(" km/h");
+      if (driveDir < 0) Serial.print(" REVERSED");
     }
     if (coasting) Serial.print(" COAST");
 #endif
@@ -501,7 +522,8 @@ static void temperatureTask() {
   }
 }
 
-// Data mode: one line every 100 ms, numbers only. flags: 1 = COAST, 2 = throttle armed, 4 = throttle on.
+// Data mode: one line every 100 ms, numbers only. flags: 1 = COAST, 2 = throttle armed, 4 = throttle on,
+// 8 = direction reversed. Speeds are forward-positive (step 5).
 static void dataTask() {
   static uint32_t t = 0;
   if (!dataOn || millis() - t < 100) return;
@@ -512,12 +534,15 @@ static void dataTask() {
   if (thrOn) { thr = thrPct; set = vSetKmh; flags |= 4; }
   if (thrArmed) flags |= 2;
   if (coasting) flags |= 1;
+  if (driveDir < 0) flags |= 8;
+  const float vel = fwdVelocity();
 #else
   const float kmh = 1.0f;                            // no gearing known outside step 5: km/h fields = rad/s
+  const float vel = motor.shaft_velocity;
 #endif
   Serial.print("$D,"); Serial.print(t); Serial.print(',');
   Serial.print(thr, 0); Serial.print(','); Serial.print(set, 1); Serial.print(',');
-  Serial.print(motor.shaft_velocity / kmh, 1); Serial.print(','); Serial.print(motor.shaft_velocity, 1); Serial.print(',');
+  Serial.print(vel / kmh, 1); Serial.print(','); Serial.print(vel, 1); Serial.print(',');
   Serial.print(motor.current.q, 2); Serial.print(','); Serial.print(motor.current.d, 2); Serial.print(',');
   Serial.print(motor.voltage.q, 2); Serial.print(','); Serial.print(motor.voltage.d, 2); Serial.print(',');
   Serial.print(motor.voltage_limit, 1); Serial.print(','); Serial.print(lastLim, 1); Serial.print(',');

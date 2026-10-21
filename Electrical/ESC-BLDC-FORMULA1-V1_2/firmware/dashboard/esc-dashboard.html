@@ -9,7 +9,7 @@
   Open in Edge or Chrome (Web Serial API) -> Connect -> pick the Nucleo's COM port -> Data ON (sends D1).
   Close the VS Code serial monitor first - only one program can use the COM port. "Demo" plays synthetic data.
   Data line from the firmware (D1, every 100 ms):
-    $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags   (flags 1 COAST, 2 armed, 4 thr on)
+    $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags   (flags 1 COAST, 2 armed, 4 thr on, 8 reversed)
   Derived on the PC (estimates): motor power P = 1.5 (Uq Iq + Ud Id)  [SimpleFOC dq amplitudes],
   battery current ~ P / Vbus, energy = integral of P, distance = integral of motor km/h (only while coupled).
   Commands sent by the buttons are the normal firmware commands and are echoed in the message window.
@@ -214,6 +214,9 @@ button.go { flex: 1; padding: 8px; }
         <input id="limVal" type="number" min="0" max="10" step="0.5" value="10" disabled><button id="limSet" disabled>A</button></div>
       <div class="row"><span class="lbl" title="MLU: lower = lower top speed; refused while spinning; max 17 V, never above 0.40 x battery">V cap</span>
         <input id="capVal" type="number" min="1" max="17" step="0.5" value="17" disabled><button id="capSet" disabled>Set V</button></div>
+      <div class="row"><span class="lbl" title="R1 / R0: which way is forward - only at standstill with the throttle released. After a reset the board uses MOTOR_DIRECTION from board.h.">Direction</span>
+        <div class="seg" id="segDir"><button class="c" data-c="R1" disabled>Normal</button><button class="c" data-c="R0" disabled>Reversed</button></div>
+        <span class="hint" id="dirNow">–</span></div>
       <div class="row"><span class="lbl">Throttle</span>
         <div class="seg"><button class="c" data-c="A1" disabled>On</button><button class="c" data-c="A0" disabled>Off</button></div>
         <button class="c" data-c="A" disabled>Status</button>
@@ -603,6 +606,9 @@ function drawInstruments() {
   $("p-iq").textContent = f(peaks.iq, 2, "A"); $("p-fet").textContent = f(peaks.fet, 1, "°C");
   $("p-sp").textContent = f(peaks.sp, 1, "km/h"); $("p-mot").textContent = f(peaks.mot, 1, "°C");
   $("p-vb").textContent = f(peaks.vb, 1, "V"); $("p-pw").textContent = f(peaks.pw, 0, "W");
+  const rev = fresh && (r.flags & 8);
+  document.querySelectorAll("#segDir button").forEach((b) => b.classList.toggle("sel", fresh && (b.dataset.c === (rev ? "R0" : "R1"))));
+  $("dirNow").textContent = fresh ? (rev ? "reversed" : "normal") : "–";
   const st = !fresh ? ["", "no data"] : (r.flags & 1) ? ["", "COAST"] : ((r.flags & 4) && !(r.flags & 2)) ? ["warn", "NOT ARMED"] : ["on", "DRIVING"];
   chip("chipState", st[0], st[1]);
   $("chipRec").querySelector("b").textContent = tstr;
@@ -653,6 +659,7 @@ function stopDemo() {
 function demoCommand(c) {
   if (c === "ME0") demo.on = false; else if (c === "ME1") demo.on = true;
   else if (c === "A0") demo.armed = false; else if (c === "A1") demo.armed = true;
+  else if (c === "R0" || c === "R1") demo.rev = c === "R0";
   else if (/^L[\d.]+$/.test(c)) demo.lim = Math.min(10, Number(c.slice(1)));
   else if (/^MLU[\d.]+$/.test(c)) demo.cap = Math.min(17, Number(c.slice(3)));
   setTimeout(() => addConsole("ok (demo)"), 60);
@@ -673,7 +680,7 @@ function demoStep() {
   const uq = 0.048 * d.w + 0.1 * iq, vbus = vbus0 - iq * 0.12;
   d.fet += (24 + 0.16 * d.iCmd * d.iCmd - d.fet) * dt / 40;
   d.mot += (22 + 0.09 * d.iCmd * d.iCmd - d.mot) * dt / 120;
-  const flags = (d.thr <= 0 && d.w < 1 ? 1 : 0) | (d.armed ? 2 : 0) | 4;
+  const flags = (d.thr <= 0 && d.w < 1 ? 1 : 0) | (d.armed ? 2 : 0) | 4 | (d.rev ? 8 : 0);
   handleLine(["$D", Math.round(d.t * 1000), d.thr.toFixed(0), set.toFixed(1), kmh.toFixed(1), d.w.toFixed(1), iq.toFixed(2),
     ((Math.random() - .5) * 0.2).toFixed(2), uq.toFixed(2), "0.05", cap.toFixed(1), d.lim.toFixed(1),
     d.fet.toFixed(1), d.mot.toFixed(1), vbus.toFixed(1), flags].join(","));

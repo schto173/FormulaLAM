@@ -65,11 +65,12 @@ a board. One screen from ~1280 x 720 (smaller windows scroll).
 - Graphs: speed, current, temperature, power & voltage; synchronized crosshair (hover), pause, named markers.
 - Efficiency (PC-side estimates): motor power 1.5 (Uq Iq + Ud Id), battery current, energy Wh, distance, Wh/km.
 - Controls: STOP (`A0`+`ME0`, also the Esc key), Enable (`ME1`+`A1`, standstill only), current limit `L`,
-  voltage cap `MLU`, throttle on/off/calibration. Every sent command is echoed in the message window.
+  voltage cap `MLU`, direction `R1` normal / `R0` reversed (standstill only; after a reset `MOTOR_DIRECTION`
+  in board.h applies), throttle on/off/calibration. Every sent command is echoed in the message window.
 - Load-test guard (on by default, switchable): sends STOP once if the FET/motor temperature reaches the set
   limit (60 / 85 °C), re-arms after cooling 5 °C. Save CSV: all data + derived values + markers.
 Firmware data line (`D1` = every 100 ms, `D0` off, off after reset):
-`$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags` (flags 1 COAST, 2 armed, 4 throttle on).
+`$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags` (flags 1 COAST, 2 armed, 4 throttle on, 8 reversed).
 
 ## Bus protection (steps 3–5)
 A torque against the rotation makes the motor a generator; a bench supply cannot take that energy back and the
