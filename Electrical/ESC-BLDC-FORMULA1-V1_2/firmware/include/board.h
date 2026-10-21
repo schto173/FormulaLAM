@@ -75,7 +75,8 @@
 #define GEAR_RATIO        8.0f    // motor turns per wheel turn (confirmed 2026-10-20)
 #define WHEEL_DIAMETER_M  0.508f  // outer diameter with tyre (20" is often 0.48-0.50) <- CONFIRM
 #define SPEED_MAX_KMH     40.0f   // throttle 100 %
-#define MOTOR_DIRECTION   1       // +1 / -1: which way is forward (live: "R1" normal, "R0" reversed, at standstill)
+#define MOTOR_DIRECTION   -1      // +1 / -1: which way is forward (-1 = "reversed" confirmed on the car 2026-10-21;
+                                  //   live: "R1" normal, "R0" reversed, at standstill)
 #define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
 #define CURRENT_RAMP_A_S  2.0f    // A/s the current may rise
 // Uq needed per rad/s of motor speed, for the speed target limit. Coasting (Iq ~ 0): 6x PWM board #1 0.045;
