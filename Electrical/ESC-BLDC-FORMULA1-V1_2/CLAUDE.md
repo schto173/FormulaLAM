@@ -91,7 +91,12 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     phase pad, no load: 0-44 V square wave; falling edge ~200-250 ns, smooth S-shape, no overshoot, no ringing,
     no spike below 0 V. Still to do: rising edge, full throttle (~35 km/h, Uq ~15 V), then the same edges UNDER
     LOAD (5 A, 10 A) - spikes scale with the switched current; ideally also a probe on a low-side source (SPx).
-  - **Current: hard max raised to 15 A (2026-10-21, user request)**, but every start still uses 10 A (`CURRENT_LIMIT`);
+  - **Scope under load (2026-10-21, board #2, pack ~44 V, max current, ~15 km/h, MOTOR_DIRECTION -1):** phase
+    falling edge ~30-40 ns (current-driven), at most a ~2-3 V / ~10-15 ns undershoot + one small ring, settled in
+    ~50 ns; rising edge also clean (user: "nothing extraordinary"). No sign of spikes that could hurt the DRV.
+  - **Current hard max now 20 A (`CURRENT_MAX`, 2026-10-21)**, start-up limit still 10 A; 15/20 A only via `L`.
+    20 A continuous ~12-15 W in the FETs -> bursts only without heatsink; 20 A fuse; check the JBD discharge limit.
+    (Earlier: hard max 15 A,) every start still uses 10 A (`CURRENT_LIMIT`);
     15 A only via `L15` / the dashboard. Estimate at 15 A, 45 V continuous: ~8-9 W in the FETs, battery ~7 A ->
     15 A fuse. Load test at 5 / 10 A still to do before using 15 A.
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
