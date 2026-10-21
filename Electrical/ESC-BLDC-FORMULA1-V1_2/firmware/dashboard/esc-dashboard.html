@@ -9,7 +9,7 @@
   Open in Edge or Chrome (Web Serial API) -> Connect -> pick the Nucleo's COM port -> Data ON (sends D1).
   Close the VS Code serial monitor first - only one program can use the COM port. "Demo" plays synthetic data.
   Data line from the firmware (D1, every 100 ms):
-    $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags   (flags 1 COAST, 2 armed, 4 thr on, 8 reversed)
+    $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags   (flags 1 COAST, 2 armed, 4 thr on, 8 reversed, 16 stall)
   Derived on the PC (estimates): motor power P = 1.5 (Uq Iq + Ud Id)  [SimpleFOC dq amplitudes],
   battery current ~ P / Vbus, energy = integral of P, distance = integral of motor km/h (only while coupled).
   Commands sent by the buttons are the normal firmware commands and are echoed in the message window.
@@ -318,6 +318,7 @@ function handleLine(line) {
     addRecord(r);
     return;
   }
+  if (line.startsWith("# STALL")) banner("STALL: motor blocked - current set to 0. Release the throttle to drive again.  (click to hide)");
   if (line.startsWith("STOPPED")) banner(line + "  - details in the messages (click to hide)");
   if (line.startsWith("=== ESC")) $("stopped").style.display = "none";
   addConsole(line);
@@ -609,7 +610,7 @@ function drawInstruments() {
   const rev = fresh && (r.flags & 8);
   document.querySelectorAll("#segDir button").forEach((b) => b.classList.toggle("sel", fresh && (b.dataset.c === (rev ? "R0" : "R1"))));
   $("dirNow").textContent = fresh ? (rev ? "reversed" : "normal") : "–";
-  const st = !fresh ? ["", "no data"] : (r.flags & 1) ? ["", "COAST"] : ((r.flags & 4) && !(r.flags & 2)) ? ["warn", "NOT ARMED"] : ["on", "DRIVING"];
+  const st = !fresh ? ["", "no data"] : (r.flags & 16) ? ["bad", "STALL - release throttle"] : (r.flags & 1) ? ["", "COAST"] : ((r.flags & 4) && !(r.flags & 2)) ? ["warn", "NOT ARMED"] : ["on", "DRIVING"];
   chip("chipState", st[0], st[1]);
   $("chipRec").querySelector("b").textContent = tstr;
 }

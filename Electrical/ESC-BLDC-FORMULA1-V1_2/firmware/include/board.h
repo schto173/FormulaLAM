@@ -81,6 +81,12 @@
                                   //   live: "R1" normal, "R0" reversed, at standstill)
 #define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
 #define CURRENT_RAMP_A_S  2.0f    // A/s the current may rise
+// Stall guard: at least STALL_CURRENT_A asked for while the motor turns slower than STALL_SPEED_RADS for
+// STALL_TIME_MS -> current 0, "STALL", throttle must be released to re-arm. Blocked (brake held) all power is
+// heat, concentrated in one phase's FETs, and the rotor buzzes on a hall edge. A start on the flat needs < 2 A.
+#define STALL_CURRENT_A   5.0f
+#define STALL_SPEED_RADS  3.0f    // motor rad/s (~0.35 km/h at 8:1, 0.508 m)
+#define STALL_TIME_MS     3000
 // Uq needed per rad/s of motor speed, for the speed target limit. Coasting (Iq ~ 0): 6x PWM board #1 0.045;
 // 3x PWM + IDRIVE 50/100 board #2 0.048 (8.33 V @ 172 rad/s, 4.44 V @ 93) - the slower edges cost voltage.
 // 0.050 + SPEED_V_RESERVE keep the target clearly below the cap: at the cap the current loop saturated and

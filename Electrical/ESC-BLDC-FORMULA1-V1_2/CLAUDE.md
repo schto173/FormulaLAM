@@ -94,6 +94,10 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   - **Scope under load (2026-10-21, board #2, pack ~44 V, max current, ~15 km/h, MOTOR_DIRECTION -1):** phase
     falling edge ~30-40 ns (current-driven), at most a ~2-3 V / ~10-15 ns undershoot + one small ring, settled in
     ~50 ns; rising edge also clean (user: "nothing extraordinary"). No sign of spikes that could hurt the DRV.
+  - **Stall (2026-10-21):** wheel held with the brake + throttle -> motor buzzed ("brrrr", a rotating "whhht") without
+    moving. Likely the rotor sitting on a hall edge under high current (hall flips, current vector jumps 60 deg;
+    smoothing extrapolates the flips into rotation) - not measured yet (ask for a dashboard CSV of a 2-3 s stall).
+    Added stall guard: >= 5 A asked for while < 3 rad/s for 3 s -> 0 A, `# STALL`, throttle must be released.
   - **Current hard max now 20 A (`CURRENT_MAX`, 2026-10-21)**, start-up limit still 10 A; 15/20 A only via `L`.
     20 A continuous ~12-15 W in the FETs -> bursts only without heatsink; 20 A fuse; check the JBD discharge limit.
     (Earlier: hard max 15 A,) every start still uses 10 A (`CURRENT_LIMIT`);

@@ -249,6 +249,7 @@ static const float RADS_PER_KMH = GEAR_RATIO / (WHEEL_DIAMETER_M / 2.0f) / 3.6f;
 static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
 static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrPct = 0.0f;
 static float iCmd = 0.0f, vSetKmh = 0.0f, vMaxKmh = 0.0f;
+static bool stalled = false;                         // stall guard tripped, cleared when the throttle re-arms
 // drive direction: +1 normal, -1 reversed. Flips the sign of the current command and of the measured speed in
 // the drive logic only - speed limit, current limit, ramp, no-regen and COAST work the same both ways.
 static int driveDir = (MOTOR_DIRECTION < 0) ? -1 : 1;
@@ -309,7 +310,7 @@ static void throttleTask() {
   if (!thrArmed) {
     iCmd = 0.0f; motor.target = 0.0f;
     if (x <= 0.0f && !isnan(v) && v <= THROTTLE_FAULT_V && thrFull >= thrIdle + 0.2f) {
-      thrArmed = true; Serial.println("# throttle armed");
+      thrArmed = true; stalled = false; Serial.println("# throttle armed");
     }
     return;
   }
@@ -319,6 +320,16 @@ static void throttleTask() {
   float vKmh = fwdVelocity() / RADS_PER_KMH;
   float want = (x > 0.0f) ? constrain(SPEED_P_A_PER_KMH * (vSetKmh - vKmh), 0.0f, limitBase) : 0.0f;
   iCmd = (want > iCmd) ? min(want, iCmd + CURRENT_RAMP_A_S * dt) : want;   // up: ramp, down: at once
+  // stall guard (see board.h): pushing hard without turning for STALL_TIME_MS -> 0 A until the throttle is released
+  static uint32_t tStall = 0;
+  if (iCmd >= STALL_CURRENT_A && fabsf(motor.shaft_velocity) < STALL_SPEED_RADS) {
+    if (!tStall) tStall = now;
+    else if (now - tStall > STALL_TIME_MS) {
+      tStall = 0; stalled = true; thrArmed = false; iCmd = 0.0f; motor.target = 0.0f;
+      Serial.println("# STALL: motor blocked (>= 5 A, not turning for 3 s) -> 0 A. Release the throttle to drive again.");
+      return;
+    }
+  } else tStall = 0;
   motor.target = driveDir * iCmd;
 }
 
@@ -512,6 +523,7 @@ static void temperatureTask() {
       Serial.print(" % -> "); Serial.print(vSetKmh, 1); Serial.print(" km/h (max "); Serial.print(vMaxKmh, 0);
       Serial.print(") | motor = "); Serial.print(fwdVelocity() / RADS_PER_KMH, 1); Serial.print(" km/h");
       if (driveDir < 0) Serial.print(" REVERSED");
+      if (stalled) Serial.print(" STALL (release throttle)");
     }
     if (coasting) Serial.print(" COAST");
 #endif
@@ -523,7 +535,7 @@ static void temperatureTask() {
 }
 
 // Data mode: one line every 100 ms, numbers only. flags: 1 = COAST, 2 = throttle armed, 4 = throttle on,
-// 8 = direction reversed. Speeds are forward-positive (step 5).
+// 8 = direction reversed, 16 = stall guard tripped. Speeds are forward-positive (step 5).
 static void dataTask() {
   static uint32_t t = 0;
   if (!dataOn || millis() - t < 100) return;
@@ -535,6 +547,7 @@ static void dataTask() {
   if (thrArmed) flags |= 2;
   if (coasting) flags |= 1;
   if (driveDir < 0) flags |= 8;
+  if (stalled) flags |= 16;
   const float vel = fwdVelocity();
 #else
   const float kmh = 1.0f;                            // no gearing known outside step 5: km/h fields = rad/s
