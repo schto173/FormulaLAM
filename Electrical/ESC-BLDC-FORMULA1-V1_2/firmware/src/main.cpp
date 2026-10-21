@@ -156,7 +156,7 @@ void doC() { sensor.handleC(); }
 void doTarget(char *cmd) { command.scalar(&motor.target, cmd); }
 // "L<value>": limit before temperature derating - volts in steps 3-4, amps in step 5. Capped for the bench.
 #if STAGE == 5
-static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_LIMIT;   // hard max
+static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_MAX;     // starts at 10, hard max 15
 #else
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
@@ -435,7 +435,7 @@ void setup() {
   Serial.print(FOC_VOLTAGE_MAX, 0); Serial.print(" V, never above "); Serial.print(FOC_MAX_FRACTION, 2);
   Serial.println(" x Vbus)");
   Serial.print("drive: throttle = max speed 0.."); Serial.print(SPEED_MAX_KMH, 0); Serial.print(" km/h, current 0..");
-  Serial.print(CURRENT_LIMIT, 0); Serial.print(" A, +"); Serial.print(CURRENT_RAMP_A_S, 1);
+  Serial.print(CURRENT_LIMIT, 0); Serial.print(" A (L up to "); Serial.print(CURRENT_MAX, 0); Serial.print(" A), +"); Serial.print(CURRENT_RAMP_A_S, 1);
   Serial.print(" A/s, gear "); Serial.print(GEAR_RATIO, 1); Serial.print(":1, wheel "); Serial.print(WHEEL_DIAMETER_M, 3);
   Serial.println(" m");
 #endif

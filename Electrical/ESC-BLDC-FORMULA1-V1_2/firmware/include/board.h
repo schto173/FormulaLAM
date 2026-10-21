@@ -12,7 +12,9 @@
 // only rocked at 0.5 V, ran perfectly at 1.0 V. Current control (step 5) compensates this by itself.
 #define ALIGN_VOLTAGE     0.8f    // V used to align the halls in steps 4-5 on the bench (was 0.4 in 6x mode)
 #define VOLTAGE_LIMIT     1.0f    // V max applied to the motor in steps 3-4 (was 0.5 in 6x mode)
-#define CURRENT_LIMIT     10.0f   // A motor current, HARD maximum in step 5 ("L" can only lower it)
+#define CURRENT_LIMIT     10.0f   // A motor current limit after every start (step 5)
+#define CURRENT_MAX       15.0f   // A HARD maximum - "L" can raise the limit up to this, never above (2026-10-21;
+                                  //   15 A: ~8-9 W in the FETs at 45 V continuous, battery ~7 A -> 15 A fuse)
 #define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the cap below
 #define FOC_VOLTAGE_MAX   17.0f   // V motor voltage cap (enough for 40 km/h); never above FOC_MAX_FRACTION x Vbus
 #define USE_SVPWM         0       // 0 = plain sine PWM (SVPWM only matters above 0.5 x Vbus, which we don't use)
