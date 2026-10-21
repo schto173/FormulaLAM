@@ -18,12 +18,17 @@
                                   //   bursts only), battery ~10 A -> 20 A fuse + BMS discharge limit; VDS OCP 0.3 V
                                   //   still above 25 A peak x 8 mOhm hot. Edges clean at max load (scope, board #2).
 #define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the cap below
-#define FOC_VOLTAGE_MAX   17.0f   // V motor voltage cap (enough for 40 km/h); never above FOC_MAX_FRACTION x Vbus
-#define USE_SVPWM         0       // 0 = plain sine PWM (SVPWM only matters above 0.5 x Vbus, which we don't use)
+#define FOC_VOLTAGE_MAX   19.5f   // V motor voltage cap: 40 km/h at 8:1 needs ~350 rad/s x 0.05 + 1.5 V reserve = 19 V;
+                                  //   never above FOC_MAX_FRACTION x Vbus (was 17 V until 2026-10-21)
+#define USE_SVPWM         1       // SpaceVector PWM: for the same motor voltage the highest phase duty is lower than with
+                                  //   sine (0.5 + 0.866 U/Vbus instead of 0.5 + U/Vbus) -> the low-side shunts get a LONGER
+                                  //   measuring window: SVPWM at 0.45 x Vbus -> max duty 89 % (5.5 us of 50 us), sine at
+                                  //   0.40 -> 90 % (5.0 us). Board #1 died at SVPWM 0.55 -> 97.6 % (1.2 us). Back on 2026-10-21.
 #define HALL_SMOOTHING    1       // 1 = SmoothingSensor estimates the angle between the 60-degree hall steps (smooth sine, quieter)
-// The voltage cap never exceeds this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus, and above
-// ~0.45 the low-side shunts get too little time to measure. With an empty pack this lowers the top speed.
-#define FOC_MAX_FRACTION  0.40f
+// The voltage cap never exceeds this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus (SVPWM, 1.2 us
+// low-side window). 0.45 with SVPWM keeps a 5.5 us window (more than the 0.40 sine setting before). With an empty
+// pack this lowers the top speed.
+#define FOC_MAX_FRACTION  0.45f
 // Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
 #define CURR_Q_P          0.09f
 #define CURR_D_P          0.06f

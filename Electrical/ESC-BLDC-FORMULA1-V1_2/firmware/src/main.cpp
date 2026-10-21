@@ -197,8 +197,8 @@ void doMotor(char *cmd) {
       return;
     }
 #if STAGE == 5
-    mluLimit = v;                                    // applied by temperatureTask (with the 0.40 x Vbus rule)
-    Serial.print("voltage cap: "); Serial.print(v, 1); Serial.println(" V (and never above 0.40 x Vbus)");
+    mluLimit = v;                                    // applied by temperatureTask (with the FOC_MAX_FRACTION x Vbus rule)
+    Serial.print("voltage cap: "); Serial.print(v, 1); Serial.print(" V (and never above "); Serial.print(FOC_MAX_FRACTION, 2); Serial.println(" x Vbus)");
     return;
 #endif
   }
@@ -496,7 +496,7 @@ static void temperatureTask() {
 #if STAGE == 5
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;
-  if (vb > 9.0f) {                                   // voltage cap: MLU value, but never above 0.40 x Vbus
+  if (vb > 9.0f) {                                   // voltage cap: MLU value, but never above FOC_MAX_FRACTION x Vbus
     float cap = min(mluLimit, FOC_MAX_FRACTION * vb);
     if (fabsf(cap - motor.voltage_limit) > 0.1f) motor.updateVoltageLimit(cap);
   }
