@@ -96,8 +96,10 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     ~50 ns; rising edge also clean (user: "nothing extraordinary"). No sign of spikes that could hurt the DRV.
   - **More voltage (2026-10-21): SVPWM back on, cap 0.45 x Vbus, `FOC_VOLTAGE_MAX` 19.5 V.** With SVPWM the highest
     phase duty for the same |U| is 0.5 + 0.866 U/Vbus (sine: 0.5 + U/Vbus), so SVPWM at 0.45 keeps a 5.5 us low-side
-    window (sine at 0.40 had 5.0 us; board #1 died at SVPWM 0.55 = 1.2 us). Top speed ~40 km/h from ~43 V. Untested -
-    check Iq noise at top speed in the dashboard and the phase edges with the scope. Load run before (sine, 0.40, 10 A):
+    window (sine at 0.40 had 5.0 us; board #1 died at SVPWM 0.55 = 1.2 us). **Tested on the pack (board #2, same
+    load setup):** full throttle 37-37.7 km/h (sine/0.40: 33), Uq 15.1 V of an 18.8 V cap (80 %, |U|/Vbus 0.36), Iq at
+    top speed 2.5-5.5 A around a 3.5-4.3 A target (same scatter as with sine), FET 25 -> 27.8 C, 0 -> 37 km/h in ~9 s
+    at 10 A. P droop ~2 km/h at ~4 A load remains (target 39.5). Load run before (sine, 0.40, 10 A):
     ramp 2 A/s exact, Iq tracks within ~0.5 A, wheel breaks away at 4-5 A, 100 % throttle -> 33 km/h (P droop ~2 km/h
     at ~4 A load), FET 22 -> 27 C, pack sag 43.4 -> 40.7 V at ~12 A motor current (~0.5 ohm path - check the cells).
   - Bus electrolytics C11/C21 = Samyoung NXA 330 uF 100 V (1.65 A ripple @100 kHz, 36 mOhm): ripple per cap ~2.1 A at
