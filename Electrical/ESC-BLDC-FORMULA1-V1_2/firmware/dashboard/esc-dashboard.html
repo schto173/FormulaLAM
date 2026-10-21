@@ -570,9 +570,9 @@ function drawInstruments() {
   const r = log.length ? log[log.length - 1] : null;
   const fresh = r && Date.now() - r.pc < 1500;
   const v = (k) => fresh ? r[k] : NaN;
-  gauge($("gSpeed"), { value: v("kmh"), min: 0, max: 40, ticks: 8, unit: "km/h", dec: 1,
+  gauge($("gSpeed"), { value: v("kmh"), min: 0, max: 45, ticks: 9, unit: "km/h", dec: 1,
     sub: fresh ? (r.rads * 60 / (2 * Math.PI)).toFixed(0) + " rpm motor" : "",
-    zones: [[35, 40, "--warn"]], marks: [{ v: v("set"), color: "--c2" }], color: "--accent2", color2: "--accent" });
+    zones: [[40, 45, "--bad"]], marks: [{ v: 40, color: "--c5" }, { v: v("set"), color: "--c2" }], color: "--accent2", color2: "--accent" });
   $("spdSub").textContent = fresh ? "target " + r.set.toFixed(1) + " km/h" : "";
   const lim = fresh ? r.ilim : 10;
   gauge($("gIq"), { value: v("iq"), min: 0, max: 20, ticks: 4, unit: "A", dec: 2, sub: fresh ? "limit " + lim.toFixed(1) + " A" : "",
