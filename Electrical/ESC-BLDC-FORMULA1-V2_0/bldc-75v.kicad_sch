@@ -23359,7 +23359,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "47uF 100V"
+		(property "Value" "330uF 100V"
 			(at 264.16 148.9709 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -23370,7 +23370,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:CP_Elec_10x10"
+		(property "Footprint" "Capacitor_THT:CP_Radial_D16.0mm_P7.50mm"
 			(at 261.3152 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -23392,7 +23392,7 @@
 				)
 			)
 		)
-		(property "Description" "Polarized capacitor"
+		(property "Description" "Bus bulk cap 330 uF 100 V, 16x25 mm, 1.65 A ripple (Samyoung NXA, as V1.2)"
 			(at 260.35 148.59 0)
 			(hide yes)
 			(show_name no)
@@ -23403,7 +23403,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C164068"
+		(property "LCSC" "C346987"
 			(at 261.3152 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -27855,7 +27855,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "47uF 100V"
+		(property "Value" "330uF 100V"
 			(at 245.11 148.9709 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27866,7 +27866,7 @@
 				(justify left)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:CP_Elec_10x10"
+		(property "Footprint" "Capacitor_THT:CP_Radial_D16.0mm_P7.50mm"
 			(at 242.2652 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -27888,7 +27888,7 @@
 				)
 			)
 		)
-		(property "Description" "Polarized capacitor"
+		(property "Description" "Bus bulk cap 330 uF 100 V, 16x25 mm, 1.65 A ripple (Samyoung NXA, as V1.2)"
 			(at 241.3 148.59 0)
 			(hide yes)
 			(show_name no)
@@ -27899,7 +27899,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C164068"
+		(property "LCSC" "C346987"
 			(at 242.2652 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -33516,7 +33516,7 @@
 				)
 			)
 		)
-		(property "Value" "47uF 100V"
+		(property "Value" "330uF 100V"
 			(at 200.66 102.87 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33526,7 +33526,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Capacitor_SMD:CP_Elec_10x10"
+		(property "Footprint" "Capacitor_THT:CP_Radial_D16.0mm_P7.50mm"
 			(at 198.12 101.6 0)
 			(hide yes)
 			(show_name no)
@@ -33548,7 +33548,7 @@
 				)
 			)
 		)
-		(property "Description" "Bus bulk cap"
+		(property "Description" "Bus bulk cap 330 uF 100 V, 16x25 mm, 1.65 A ripple (Samyoung NXA, as V1.2)"
 			(at 198.12 101.6 0)
 			(hide yes)
 			(show_name no)
@@ -33559,7 +33559,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C164068"
+		(property "LCSC" "C346987"
 			(at 198.12 101.6 0)
 			(hide yes)
 			(show_name no)

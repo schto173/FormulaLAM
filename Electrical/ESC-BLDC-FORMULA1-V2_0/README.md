@@ -14,14 +14,15 @@ into the DRV8353 amplifiers, DRV beside the FETs) and must survive a 60 V batter
 - **Power supply (option A):** DRV8353 buck makes 12 V (VBUCK) for VM only, faster (R34 180k ≈ 480 kHz, L1 100 µH 6x6);
   TPS562201 makes 5 V from 12 V (replaces the LM5164 58 V buck). 5 V now comes up at ~6 V bus.
 - **Phase voltage sensing removed** (U3 + dividers) – SimpleFOC does not use it. Fuse F1 removed (fuse goes in the battery cable).
-- **Bus caps:** 3x SMD 47 µF 100 V (C11, C21, C68) + MLCCs in every half-bridge; TVS SMCJ60A (C224057; starts conducting at 66.7 V, so the board is safe with up to a 60 V battery).
+- **Bus caps:** 3x THT 330 µF 100 V, 16x25 mm (C11, C21, C68; Samyoung NXA C346987 as on V1.2, 1.65 A ripple each
+  = ~5 A, enough for 20 A bursts) + MLCCs in every half-bridge; TVS SMCJ60A (C224057; starts conducting at 66.7 V, so the board is safe with up to a 60 V battery).
 - **Wheel speed input** J11 (JST-XH 3P: 1 = +5V, 2 = SIG, 3 = GND) → D10 / R78 4.7k to 3V3 / C73 → **PC6 (TIM3_CH1)**.
 - **Test points:** TP1/TP2 Keystone 5001 GND loops for the scope clip (power side / logic side), pads TP3 VGLS,
   TP4 VCP, TP5 12 V, TP6 5 V, TP7 3.3 V.
 - **Motor pads** are three single 2.5 mm² solder-wire pads: J6 = MOTC, J12 = MOTB, J13 = MOTA.
 - Freed Nucleo pins: PB0, PC0, PC2 (were phase voltage sensing).
 
-## Layout (board 98 x 90 mm, x 143–241 / y 44–134)
+## Layout (board 110.5 x 90 mm, x 143–253.5 / y 44–134)
 - Sits on top of the Nucleo (sockets on our bottom side); the **ST-LINK / USB end of the Nucleo stays uncovered**.
 - **Power stage "pinwheel"** (after TI's DRV8353RS EVM): DRV rotated 45°, one half-bridge cell per DRV pin group –
   phase C above, B right, A below – so every phase gets a short gate/sense path (14–26 mm straight line; V1 had

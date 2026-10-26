@@ -96,9 +96,11 @@ D('TP3', -4.0, 19.5, 0); D('TP4', -1.3, 19.5, 0)        # VGLS, VCP (below the D
 # ---------------- power corners: battery, TVS, bulk caps ----------------------------------------------------------------
 P('J5', 221.0, 50.5, 0)                    # battery wires from the top edge: GND pad left, VDRAIN pad right
 P('D8', 209.0, 50.5, 180)                  # TVS SMCJ54A beside the battery pads (VDRAIN end toward J5)
-P('C68', 234.0, 65.5, 0); P('C11', 234.0, 77.0, 0)       # bulk caps, top-right corner (+ pad toward the cells)
-P('C21', 234.0, 104.5, 0)                  # bulk cap, bottom-right corner
-P('TP1', 232.0, 118.0, 0)                  # scope GND loop beside the power stage
+# bus caps: 3x 330 uF 100 V THT (16 mm, footprint origin = + pad, body centre 3.75 mm to the right)
+P('C68', 234.0 - 3.75, 66.0, 0)            # beside cell C
+P('C11', 243.6 - 3.75, 83.0, 0)            # right of cell B
+P('C21', 236.5 - 3.75, 108.5, 0)           # beside cell A
+P('TP1', 233.0, 122.0, 0)                  # scope GND loop beside the power stage
 P('R13', 205.5, 129.0, 0)                  # VSENVM top resistor (383k from VDRAIN)
 
 # ---------------- 5 V buck (TPS562201) below-left of the DRV, output toward CN7_6 ----------------------------------------
@@ -147,7 +149,7 @@ print('placed %d, not placed: %s' % (len(placed), missing))
 for ph in 'CBA': print('cell %s: LS at (%.2f, %.2f)' % (ph, LS[ph][0], LS[ph][1]))
 
 # ---------------- M3 holes in the 4 board corners (board-only, no schematic symbol) -----------------------------------------
-for ref, (x, y) in (('H1', (147.0, 48.0)), ('H2', (237.0, 48.0)), ('H3', (147.0, 130.0)), ('H4', (237.0, 130.0))):
+for ref, (x, y) in (('H1', (147.0, 48.0)), ('H2', (249.5, 48.0)), ('H3', (147.0, 130.0)), ('H4', (249.5, 130.0))):
     h = pcbnew.FootprintLoad(r"C:/Program Files/KiCad/10.0/share/kicad/footprints/MountingHole.pretty", 'MountingHole_3.2mm_M3')
     h.SetReference(ref); h.SetValue('M3'); h.SetBoardOnly(True); h.SetExcludedFromBOM(True); h.SetExcludedFromPosFiles(True)
     h.SetPosition(pcbnew.VECTOR2I(MM(x), MM(y))); b.Add(h)

@@ -77,7 +77,7 @@ for f in b.GetFootprints():
 print('pads without a netlist entry:', missing[:20])
 
 # ---- 4. outline: HAT over the Nucleo MCU end + power-stage extension away from the USB -----------------------------------
-x0, y0, x1, y1 = 143.00, 44.00, 241.00, 134.00     # from just left of the Nucleo holes (ST-LINK end free) to the power-stage extension; connector strips above CN10 and below CN7
+x0, y0, x1, y1 = 143.00, 44.00, 253.50, 134.00     # from just left of the Nucleo holes (ST-LINK end free) to the power-stage extension; connector strips above CN10 and below CN7
 for (ax, ay), (bx, by) in (((x0, y0), (x1, y0)), ((x1, y0), (x1, y1)), ((x1, y1), (x0, y1)), ((x0, y1), (x0, y0))):
     s = pcbnew.PCB_SHAPE(b); s.SetShape(pcbnew.SHAPE_T_SEGMENT); s.SetLayer(pcbnew.Edge_Cuts); s.SetWidth(MM(0.1))
     s.SetStart(pcbnew.VECTOR2I(MM(ax), MM(ay))); s.SetEnd(pcbnew.VECTOR2I(MM(bx), MM(by))); b.Add(s)
