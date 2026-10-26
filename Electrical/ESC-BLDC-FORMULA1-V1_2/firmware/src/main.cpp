@@ -147,7 +147,26 @@ HallSensor sensor = HallSensor(PIN_HALL_A, PIN_HALL_B, PIN_HALL_C, POLE_PAIRS);
 // constructor also sets phase_correction = -30 deg el., because a hall edge marks the START of a sector
 SmoothingSensor smooth = SmoothingSensor(sensor, motor);
 #endif
-LowsideCurrentSense current_sense = LowsideCurrentSense(SHUNT_OHMS, CSA_GAIN, PIN_SOA, PIN_SOB, PIN_SOC);
+// Low-side current sense with two-phase reconstruction: the shunt of the phase with the highest duty cycle gets the
+// shortest measuring window (lower FET on only (1 - duty) x 50 us). Above RECON_DUTY that reading is replaced by
+// -(sum of the other two). driver.dc_a/b/c are the duty cycles SimpleFOC set last (the period that was sampled).
+class TwoPhaseLowside : public LowsideCurrentSense {
+ public:
+  using LowsideCurrentSense::LowsideCurrentSense;
+  bool recon = false;                                // switched on after initFOC (its checks drive single phases)
+  uint32_t nAll = 0, nRecon = 0;                     // statistics for the status line
+  PhaseCurrent_s getPhaseCurrents() override {
+    PhaseCurrent_s c = LowsideCurrentSense::getPhaseCurrents();
+    nAll++;
+    if (!recon) return c;
+    float da = ::driver.dc_a, db = ::driver.dc_b, dc = ::driver.dc_c, m = max(da, max(db, dc));   // our global driver
+    if (m < RECON_DUTY) return c;
+    if (m == da) c.a = -(c.b + c.c); else if (m == db) c.b = -(c.a + c.c); else c.c = -(c.a + c.b);
+    nRecon++;
+    return c;
+  }
+};
+TwoPhaseLowside current_sense = TwoPhaseLowside(SHUNT_OHMS, CSA_GAIN, PIN_SOA, PIN_SOB, PIN_SOC);
 Commander command = Commander(Serial);
 
 void doA() { sensor.handleA(); }
@@ -170,6 +189,7 @@ void doData(char *cmd) {
   Serial.println(dataOn ? "data mode ON (D0 = off): $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags"
                         : "data mode OFF");
 }
+static float capFraction = FOC_MAX_FRACTION;       // "V<fraction>": voltage cap <= capFraction x Vbus
 #if STAGE == 5
 static float mluLimit = FOC_VOLTAGE_MAX;             // "MLU<volts>" lowers the voltage cap for a test
 #endif
@@ -198,7 +218,7 @@ void doMotor(char *cmd) {
     }
 #if STAGE == 5
     mluLimit = v;                                    // applied by temperatureTask (with the FOC_MAX_FRACTION x Vbus rule)
-    Serial.print("voltage cap: "); Serial.print(v, 1); Serial.print(" V (and never above "); Serial.print(FOC_MAX_FRACTION, 2); Serial.println(" x Vbus)");
+    Serial.print("voltage cap: "); Serial.print(v, 1); Serial.print(" V (and never above "); Serial.print(capFraction, 2); Serial.println(" x Vbus)");
     return;
 #endif
   }
@@ -275,6 +295,27 @@ void doThrottle(char *cmd) {
   Serial.print(" V | full "); Serial.print(thrFull, 2); Serial.print(" V | 100 % = "); Serial.print(SPEED_MAX_KMH, 0);
   Serial.print(" km/h | max "); Serial.print(limitBase, 1); Serial.print(" A, +"); Serial.print(CURRENT_RAMP_A_S, 1);
   Serial.println(" A/s");
+}
+// "V0.50": voltage cap fraction (0.30 .. FOC_FRACTION_LIMIT), lowering only at standstill; "V" = status
+void doFraction(char *cmd) {
+  if (cmd[0]) {
+    float f = atof(cmd);
+    if (!(f >= 0.30f && f <= FOC_FRACTION_LIMIT)) {
+      Serial.print("refused: V must be between 0.30 and "); Serial.println(FOC_FRACTION_LIMIT, 2); return;
+    }
+    if (f < capFraction && fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
+      Serial.println("refused: lowering V while spinning brakes into the supply - release, wait until it stops"); return;
+    }
+    capFraction = f;
+  }
+  Serial.print("voltage cap fraction: "); Serial.print(capFraction, 2); Serial.print(" x Vbus (SVPWM max 0.577; ");
+  Serial.print(capFraction * 1.732f * 100.0f, 0); Serial.println(" % of the battery between two motor wires)");
+}
+// "X1" / "X0": two-phase current reconstruction on / off (for comparison); "X" = status
+void doRecon(char *cmd) {
+  if (cmd[0] == '0' || cmd[0] == '1') current_sense.recon = (cmd[0] == '1');
+  Serial.print("two-phase current reconstruction: "); Serial.print(current_sense.recon ? "ON" : "OFF");
+  Serial.print(" (phase above "); Serial.print(RECON_DUTY * 100.0f, 0); Serial.println(" % duty is calculated)");
 }
 // "R1" normal / "R0" reversed / "R" status - only at standstill with the throttle released
 void doDirection(char *cmd) {
@@ -441,9 +482,10 @@ void setup() {
 #endif
   if (!motor.initFOC()) halt("initFOC failed - see the messages above (hall order / pole pairs / align voltage)");
 #if STAGE == 5
-  motor.updateVoltageLimit(min(FOC_VOLTAGE_MAX, FOC_MAX_FRACTION * vbus));   // current PI limits follow
+  motor.updateVoltageLimit(min(FOC_VOLTAGE_MAX, capFraction * vbus));   // current PI limits follow
+  current_sense.recon = true;                       // two-phase reconstruction from here on ("X0" = off)
   Serial.print("voltage cap "); Serial.print(motor.voltage_limit, 1); Serial.print(" V (max ");
-  Serial.print(FOC_VOLTAGE_MAX, 0); Serial.print(" V, never above "); Serial.print(FOC_MAX_FRACTION, 2);
+  Serial.print(FOC_VOLTAGE_MAX, 0); Serial.print(" V, never above "); Serial.print(capFraction, 2);
   Serial.println(" x Vbus)");
   Serial.print("drive: throttle = max speed 0.."); Serial.print(SPEED_MAX_KMH, 0); Serial.print(" km/h, current 0..");
   Serial.print(CURRENT_LIMIT, 0); Serial.print(" A (L up to "); Serial.print(CURRENT_MAX, 0); Serial.print(" A), +"); Serial.print(CURRENT_RAMP_A_S, 1);
@@ -459,6 +501,8 @@ void setup() {
 #if STAGE == 5
   command.add('A', doThrottle, "throttle: A1 on, A0 off, AI idle=now, AF full=now");
   command.add('R', doDirection, "direction: R1 normal, R0 reversed (standstill only)");
+  command.add('V', doFraction, "voltage cap fraction: V0.45 .. V0.55");
+  command.add('X', doRecon, "two-phase current reconstruction: X1 on, X0 off");
 #endif
   motor.useMonitoring(Serial);
   motor.monitor_downsample = 0;                      // off: it floods the terminal (hundreds of lines/s).
@@ -497,7 +541,7 @@ static void temperatureTask() {
   float lim = limitBase * k;                         // A
   motor.current_limit = lim;
   if (vb > 9.0f) {                                   // voltage cap: MLU value, but never above FOC_MAX_FRACTION x Vbus
-    float cap = min(mluLimit, FOC_MAX_FRACTION * vb);
+    float cap = min(mluLimit, capFraction * vb);
     if (fabsf(cap - motor.voltage_limit) > 0.1f) motor.updateVoltageLimit(cap);
   }
 #else
@@ -514,7 +558,12 @@ static void temperatureTask() {
     Serial.print(" | Uq "); Serial.print(motor.voltage.q, 2); Serial.print(" V");
     Serial.print(" | limit "); Serial.print(lim, 2);
 #if STAGE == 5
-    Serial.print(" | Umax "); Serial.print(motor.voltage_limit, 1);
+    Serial.print(" | Umax "); Serial.print(motor.voltage_limit, 1); Serial.print(" ("); Serial.print(capFraction, 2); Serial.print(")");
+    {
+      static uint32_t pa = 0, pr = 0;
+      uint32_t da = current_sense.nAll - pa, dr = current_sense.nRecon - pr; pa = current_sense.nAll; pr = current_sense.nRecon;
+      Serial.print(current_sense.recon ? " | recon " : " | recon OFF "); Serial.print(da ? 100.0f * dr / da : 0.0f, 0); Serial.print(" %");
+    }
 #endif
 #if STAGE == 5
     Serial.print(" | Iq "); Serial.print(motor.current.q, 2); Serial.print(" A");

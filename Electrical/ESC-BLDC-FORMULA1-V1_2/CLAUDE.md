@@ -102,6 +102,11 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     at 10 A. P droop ~2 km/h at ~4 A load remains (target 39.5). Load run before (sine, 0.40, 10 A):
     ramp 2 A/s exact, Iq tracks within ~0.5 A, wheel breaks away at 4-5 A, 100 % throttle -> 33 km/h (P droop ~2 km/h
     at ~4 A load), FET 22 -> 27 C, pack sag 43.4 -> 40.7 V at ~12 A motor current (~0.5 ohm path - check the cells).
+  - **Two-phase current reconstruction (2026-10-26, untested):** `TwoPhaseLowside` (main.cpp) replaces the reading of
+    the phase above `RECON_DUTY` 0.80 by -(other two) - what a VESC does. On after initFOC, `X0`/`X1` to compare, the
+    status line shows `recon x %`. Voltage fraction now live: `V0.45` (start) .. `V0.55` (`FOC_FRACTION_LIMIT`;
+    2nd-highest phase keeps >= 4.4 us), cap max 24 V; speed limit still 40 km/h, so more voltage = more headroom /
+    40 km/h also with a sagging pack. Plan: compare Iq scatter at top speed X0 vs X1 at 0.45, then V0.50, V0.55.
   - Bus electrolytics C11/C21 = Samyoung NXA 330 uF 100 V (1.65 A ripple @100 kHz, 36 mOhm): ripple per cap ~2.1 A at
     10 A, ~4.1 A at 20 A motor current -> 20 A bursts ok, continuous 20 A too much; V2: bigger bus capacitor bank.
   - **Stall (2026-10-21):** wheel held with the brake + throttle -> motor buzzed ("brrrr", a rotating "whhht") without

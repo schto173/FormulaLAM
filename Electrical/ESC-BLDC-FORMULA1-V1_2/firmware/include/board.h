@@ -18,7 +18,7 @@
                                   //   bursts only), battery ~10 A -> 20 A fuse + BMS discharge limit; VDS OCP 0.3 V
                                   //   still above 25 A peak x 8 mOhm hot. Edges clean at max load (scope, board #2).
 #define FOC_VOLTAGE_LIMIT 1.0f    // V cap in step 5 during start-up (alignment); then the cap below
-#define FOC_VOLTAGE_MAX   19.5f   // V motor voltage cap: 40 km/h at 8:1 needs ~350 rad/s x 0.05 + 1.5 V reserve = 19 V;
+#define FOC_VOLTAGE_MAX   24.0f   // V motor voltage cap: 40 km/h at 8:1 needs ~350 rad/s x 0.05 + 1.5 V reserve = 19 V;
                                   //   never above FOC_MAX_FRACTION x Vbus (was 17 V until 2026-10-21)
 #define USE_SVPWM         1       // SpaceVector PWM: for the same motor voltage the highest phase duty is lower than with
                                   //   sine (0.5 + 0.866 U/Vbus instead of 0.5 + U/Vbus) -> the low-side shunts get a LONGER
@@ -28,7 +28,12 @@
 // The voltage cap never exceeds this fraction of Vbus: board #1 lost its DRV8353 at ~0.55 x Vbus (SVPWM, 1.2 us
 // low-side window). 0.45 with SVPWM keeps a 5.5 us window (more than the 0.40 sine setting before). With an empty
 // pack this lowers the top speed.
-#define FOC_MAX_FRACTION  0.45f
+#define FOC_MAX_FRACTION  0.45f   // default at start; live with "V<fraction>" between 0.30 and FOC_FRACTION_LIMIT
+#define FOC_FRACTION_LIMIT 0.55f  // highest "V" accepts: with two-phase reconstruction the 2nd-highest phase still
+                                  //   has >= 4.4 us (SVPWM: 0.5 + 0.75 U/Vbus = 91 %) to measure at 0.55
+// Two-phase current reconstruction (what a VESC does): a phase above RECON_DUTY (its low-side window < 10 us)
+// is not measured but calculated from the other two: ia + ib + ic = 0 (star-connected motor). Only after initFOC.
+#define RECON_DUTY        0.80f
 // Current PI from "MFP0.4" + "MFC200" on the 7070 (2026-10-14: R 0.16 Ohm incl. FETs/wires, Ld 50 uH, Lq 70 uH)
 #define CURR_Q_P          0.09f
 #define CURR_D_P          0.06f
