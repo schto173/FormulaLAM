@@ -114,6 +114,15 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   - Gearing changed to 13.8:1 (2026-10-26, GEAR_RATIO 13.8; briefly assumed 15). 40 km/h needs 604 motor rad/s = 29 V
     back-EMF (phase peak), but 12S at 43 V gives at most Vbus/sqrt3 = 24.8 V even at full SVPWM -> ~31 km/h theoretical
     (~37 km/h at 50.4 V full), ~25 km/h at 0.48 / 43 V, ~29 km/h at 0.55 / 43 V (model; real ~5-10 % lower).
+  - **Trip on board #2 (2026-10-26)**, 13.8:1, V0.48, Vbus 46.8 V, no load, full throttle, 26.0 km/h (395 rad/s),
+    Iq ~1 A, recon 100 %: `STOPPED: DRV8353 nFAULT`, faults `0x604` = VDS_OCP on the **low-side FET of phase B**
+    (VDS > 0.3 V for > 2 us = ~60-75 A on a CSD19532 at ~4 mOhm). The latched OCP shut down; the board still runs
+    afterwards (no GDUV). Same regime as board #1's death (~46 V, high modulation). No data captured. Suspects:
+    angle error (hall glitch) at full voltage, current loop at the voltage cap, false VDS trip. User keeps V <= 0.50.
+    -> **Black box** added: every control cycle (angle, hall, raw ia/ib/ic, calculated phase, Iq/Id, Uq/Ud, duties,
+    speed, nFAULT) into a 1024-entry RAM ring; `halt()` prints it after any stop as `$B,...` lines (~7 s), the
+    dashboard saves it automatically as `esc-blackbox-<time>.csv` (Downloads).
+  - Direction back to normal (`MOTOR_DIRECTION 1`) with the new gearing; user is fitting a larger pinion for 35 km/h.
     Not a firmware limit (a VESC has the same one, except with field weakening = extra -Id, ~ -28 A at 40 km/h here).
     Options discussed: gearing ~10:1, higher-KV motor, more cells.
   - Bus electrolytics C11/C21 = Samyoung NXA 330 uF 100 V (1.65 A ripple @100 kHz, 36 mOhm): ripple per cap ~2.1 A at

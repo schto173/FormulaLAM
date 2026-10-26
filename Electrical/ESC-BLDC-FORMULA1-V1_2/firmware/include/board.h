@@ -87,8 +87,8 @@
 #define GEAR_RATIO        13.8f   // motor turns per wheel turn (13.8:1 since 2026-10-26, was 8:1)
 #define WHEEL_DIAMETER_M  0.508f  // outer diameter with tyre (20" is often 0.48-0.50) <- CONFIRM
 #define SPEED_MAX_KMH     40.0f   // throttle 100 %
-#define MOTOR_DIRECTION   -1      // +1 / -1: which way is forward (-1 = "reversed" confirmed on the car 2026-10-21;
-                                  //   live: "R1" normal, "R0" reversed, at standstill)
+#define MOTOR_DIRECTION   1       // +1 / -1: which way is forward (+1 = normal again with the new gearing 2026-10-26;
+                                  //   was -1 with 8:1; live: "R1" normal, "R0" reversed, at standstill)
 #define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
 #define CURRENT_RAMP_A_S  2.0f    // A/s the current may rise
 // Stall guard: at least STALL_CURRENT_A asked for while the motor turns slower than STALL_SPEED_RADS for

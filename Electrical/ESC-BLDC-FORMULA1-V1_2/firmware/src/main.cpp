@@ -162,12 +162,15 @@ class TwoPhaseLowside : public LowsideCurrentSense {
   uint32_t cmpN = 0, cmpHigh = 0;
   float cmpRef = 0, mSum = 0, mSq = 0, cSum = 0, cSq = 0;
   void cmpReset(float ref) { cmpN = cmpHigh = 0; cmpRef = ref; mSum = mSq = cSum = cSq = 0; }
+  PhaseCurrent_s lastRaw = {0, 0, 0};                // last measured phase currents (black box)
+  int8_t lastCalc = -1;                              // phase that had the short window: 0 a, 1 b, 2 c, -1 none
   PhaseCurrent_s getPhaseCurrents() override {
     PhaseCurrent_s c = LowsideCurrentSense::getPhaseCurrents(), r = c;
     nAll++;
     float da = ::driver.dc_a, db = ::driver.dc_b, dc = ::driver.dc_c, m = max(da, max(db, dc));   // our global driver
     bool high = (m >= RECON_DUTY);                   // one window too short: calculate that phase
     if (high) { if (m == da) r.a = -(r.b + r.c); else if (m == db) r.b = -(r.a + r.c); else r.c = -(r.a + r.b); }
+    lastRaw = c; lastCalc = !high ? -1 : (m == da) ? 0 : (m == db) ? 1 : 2;
     if (compare) {
       float ang = ::motor.electrical_angle;            // set by loopFOC just before it reads the currents
       float qm = getDQCurrents(getABCurrents(c), ang).q - cmpRef;
@@ -240,6 +243,54 @@ void doMotor(char *cmd) {
   command.motor(&motor, cmd);
 }
 
+// Black box: every control cycle one entry in a ring buffer in RAM (the last BB_N cycles, ~27 kB). halt() prints it
+// after ANY stop as "$B,..." lines (the dashboard saves them as a CSV file): what happened right before a shutdown.
+// Integers to keep it small: currents and voltages in 0.01 A / 0.01 V, angle in mrad, duty in 1/250, speed 0.1 rad/s.
+#define BB_N 1024
+struct BbEntry {
+  uint32_t t;
+  int16_t ang, ia, ib, ic, iq, id, uq, ud, vel;
+  uint8_t da, db, dc, flags;                         // flags: bits 0-2 hall state, 3-4 calculated phase (0 none, 1 a,
+};                                                   //   2 b, 3 c), bit 5 nFAULT low, bit 6 reconstruction on (X1)
+static BbEntry bb[BB_N];
+static uint32_t bbHead = 0, bbCount = 0;
+static inline int16_t bb16(float v, float scale) { return (int16_t)constrain(v * scale, -32767.0f, 32767.0f); }
+static inline uint8_t bbDuty(float d) { return (uint8_t)constrain(d * 250.0f, 0.0f, 250.0f); }
+static void bbRecord() {
+  BbEntry &e = bb[bbHead];
+  const PhaseCurrent_s &c = current_sense.lastRaw;
+  e.t = micros();
+  e.ang = bb16(motor.electrical_angle, 1000.0f);
+  e.ia = bb16(c.a, 100.0f); e.ib = bb16(c.b, 100.0f); e.ic = bb16(c.c, 100.0f);
+  e.iq = bb16(motor.current.q, 100.0f); e.id = bb16(motor.current.d, 100.0f);
+  e.uq = bb16(motor.voltage.q, 100.0f); e.ud = bb16(motor.voltage.d, 100.0f);
+  e.vel = bb16(motor.shaft_velocity, 10.0f);
+  e.da = bbDuty(driver.dc_a); e.db = bbDuty(driver.dc_b); e.dc = bbDuty(driver.dc_c);
+  e.flags = (sensor.hall_state & 7) | ((current_sense.lastCalc + 1) << 3) | (drv::faultActive() ? 32 : 0)
+          | (current_sense.recon ? 64 : 0);
+  bbHead = (bbHead + 1) % BB_N; bbCount++;
+}
+static void bbDump() {
+  const uint32_t n = min(bbCount, (uint32_t)BB_N);
+  if (!n) return;
+  const uint32_t i0 = (bbHead + BB_N - n) % BB_N, tEnd = bb[(bbHead + BB_N - 1) % BB_N].t;
+  Serial.print("# BLACK BOX START: last "); Serial.print(n); Serial.print(" control cycles = ");
+  Serial.print((tEnd - bb[i0].t) / 1000.0f, 1); Serial.println(" ms before the stop, oldest first");
+  Serial.println("# $B,t_us,hall,ang_mrad,ia,ib,ic,calc,iq,id,uq,ud,dc_a,dc_b,dc_c,vel,nfault,recon"
+                 " (A and V x100, duty x250, rad/s x10; t = 0 at the last cycle)");
+  for (uint32_t k = 0; k < n; k++) {
+    const BbEntry &e = bb[(i0 + k) % BB_N];
+    Serial.print("$B,"); Serial.print((int32_t)(e.t - tEnd)); Serial.print(','); Serial.print(e.flags & 7);
+    Serial.print(','); Serial.print(e.ang); Serial.print(','); Serial.print(e.ia); Serial.print(','); Serial.print(e.ib);
+    Serial.print(','); Serial.print(e.ic); Serial.print(','); Serial.print((e.flags >> 3) & 3);
+    Serial.print(','); Serial.print(e.iq); Serial.print(','); Serial.print(e.id); Serial.print(','); Serial.print(e.uq);
+    Serial.print(','); Serial.print(e.ud); Serial.print(','); Serial.print(e.da); Serial.print(','); Serial.print(e.db);
+    Serial.print(','); Serial.print(e.dc); Serial.print(','); Serial.print(e.vel);
+    Serial.print(','); Serial.print((e.flags >> 5) & 1); Serial.print(','); Serial.println((e.flags >> 6) & 1);
+  }
+  Serial.println("# BLACK BOX END");
+}
+
 static bool pwmReady = false;
 static bool drvReady = false;                        // DRV8353 enabled and configured (SPI answers)
 static void halt(const char *why) {
@@ -256,6 +307,7 @@ static void halt(const char *why) {
   if (drvReady) drv::printFaults(Serial);
   else Serial.println("  (DRV8353 not started yet - no fault data, nothing was switched)");
   digitalWrite(PIN_DRV_EN, LOW);
+  bbDump();                                          // driver is off already; takes ~7 s at 115200 baud
   while (true) { digitalWrite(PIN_LED, !digitalRead(PIN_LED)); delay(100); }
 }
 
@@ -639,6 +691,7 @@ static void dataTask() {
 
 void loop() {
   motor.loopFOC();
+  bbRecord();
   motor.move();
   command.run();
   motor.monitor();

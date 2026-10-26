@@ -322,7 +322,11 @@ async function send(text) {
 }
 
 // ---- incoming lines -----------------------------------------------------------------------------------------
+let bbox = null;                  // black box lines after a stop (firmware prints them, we save them as CSV)
 function handleLine(line) {
+  if (line.startsWith("$B,")) { if (bbox) bbox.push(line.slice(3)); return; }
+  if (line.startsWith("# BLACK BOX START")) bbox = [];
+  if (line.startsWith("# BLACK BOX END") && bbox) { saveBlackBox(bbox); bbox = null; }
   if (line.startsWith("$D,")) {
     const p = line.slice(3).split(",").map(Number);
     if (p.length < FIELDS_MIN) return;
@@ -649,16 +653,30 @@ window.addEventListener("resize", frame);
 $("win").onchange = frame;
 
 // ---- CSV ----------------------------------------------------------------------------------------------------
+function download(name, text) {
+  const blob = new Blob([text], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+// black box: integers from the firmware -> real units (A, V, rad, duty 0..1, rad/s)
+function blackBoxCsv(lines) {
+  const scale = [1, 1, 1000, 100, 100, 100, 1, 100, 100, 100, 100, 250, 250, 250, 10, 1, 1];
+  const head = "t_us,hall,angle_rad,ia_A,ib_A,ic_A,calc_phase,iq_A,id_A,uq_V,ud_V,duty_a,duty_b,duty_c,speed_rads,nfault,recon";
+  return head + "\n" + lines.map((l) => l.split(",").map((v, k) => +(Number(v) / scale[k]).toFixed(4)).join(",")).join("\n") + "\n";
+}
+function saveBlackBox(lines) {
+  const name = "esc-blackbox-" + stamp() + ".csv";
+  download(name, blackBoxCsv(lines));
+  addConsole("black box: " + lines.length + " control cycles before the stop saved as " + name + " (Downloads)", "mark");
+}
 $("save").onclick = () => {
   const cols = FIELDS.concat(DERIVED);
   const head = ["pc_time_iso"].concat(cols, ["note"]).join(",");
   const rows = log.map((r) => [new Date(r.pc).toISOString()].concat(cols.map((c) => isFinite(r[c]) ? +r[c].toFixed(4) : ""),
     [r.note ? '"' + String(r.note).replace(/"/g, "'") + '"' : ""]).join(","));
-  const blob = new Blob([head + "\n" + rows.join("\n") + "\n"], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "esc-log-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".csv";
-  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  download("esc-log-" + stamp() + ".csv", head + "\n" + rows.join("\n") + "\n");
 };
 
 // ---- demo (synthetic data, no board) ------------------------------------------------------------------------
