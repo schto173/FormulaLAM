@@ -669,7 +669,7 @@ function startDemo() {
   demoTimer = setInterval(demoStep, 100);
   setConnected(true, "demo");
   $("demo").classList.add("primary"); $("demo").textContent = "Stop demo";
-  addConsole("=== demo: synthetic data - 100 kg car, 15:1, throttle profile; commands are simulated", "mark");
+  addConsole("=== demo: synthetic data - 100 kg car, 13.8:1, throttle profile; commands are simulated", "mark");
 }
 function stopDemo() {
   if (!demoTimer) return;
@@ -690,7 +690,7 @@ function demoStep() {
   const d = demo, dt = 0.1; d.t += dt;
   const ph = d.t % 70;
   d.thr = !d.armed || !d.on ? 0 : ph < 3 ? 0 : ph < 30 ? 85 : ph < 40 ? 55 : ph < 52 ? 0 : 75;
-  const rpk = 16.4, vbus0 = 44, cap = Math.min(d.cap, 0.45 * vbus0);
+  const rpk = 15.09, vbus0 = 44, cap = Math.min(d.cap, 0.45 * vbus0);
   const vmax = Math.min(40, (cap - 1.5) / 0.05 / rpk);
   const set = d.thr / 100 * vmax, kmh = d.w / rpk;
   const want = d.thr > 0 ? Math.min(d.lim, Math.max(0, 2 * (set - kmh))) : 0;

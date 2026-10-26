@@ -111,8 +111,9 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     iq_calc, sd_calc, calc%), the dashboard shows them side by side - no X0/X1 toggling needed for the comparison.
     Result 2026-10-26: 0 % calculated at low speed, ~40-50 % at top speed without load, ~12 % under load; scatter
     measured vs calculated "similar" at 0.45 and 0.48 -> measurement was already good enough there. 0.48: 38.3 km/h (8:1).
-  - Gearing changed to 15:1 (2026-10-26, GEAR_RATIO 15). 40 km/h needs 656 motor rad/s = 31.5 V back-EMF (phase peak),
-    but 12S at 43 V gives at most Vbus/sqrt3 = 24.8 V even at full SVPWM -> ~28 km/h theoretical, ~23 km/h at 0.48.
+  - Gearing changed to 13.8:1 (2026-10-26, GEAR_RATIO 13.8; briefly assumed 15). 40 km/h needs 604 motor rad/s = 29 V
+    back-EMF (phase peak), but 12S at 43 V gives at most Vbus/sqrt3 = 24.8 V even at full SVPWM -> ~31 km/h theoretical
+    (~37 km/h at 50.4 V full), ~25 km/h at 0.48 / 43 V, ~29 km/h at 0.55 / 43 V (model; real ~5-10 % lower).
     Not a firmware limit (a VESC has the same one, except with field weakening = extra -Id, ~ -28 A at 40 km/h here).
     Options discussed: gearing ~10:1, higher-KV motor, more cells.
   - Bus electrolytics C11/C21 = Samyoung NXA 330 uF 100 V (1.65 A ripple @100 kHz, 36 mOhm): ripple per cap ~2.1 A at
