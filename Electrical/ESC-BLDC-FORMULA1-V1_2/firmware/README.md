@@ -70,7 +70,11 @@ a board. One screen from ~1280 x 720 (smaller windows scroll).
 - Load-test guard (on by default, switchable): sends STOP once if the FET/motor temperature reaches the set
   limit (60 / 85 °C), re-arms after cooling 5 °C. Save CSV: all data + derived values + markers.
 Firmware data line (`D1` = every 100 ms, `D0` off, off after reset):
-`$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags` (flags 1 COAST, 2 armed, 4 throttle on, 8 reversed).
+`$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags,iq_meas,sd_meas,iq_calc,sd_calc,calc%`
+(flags 1 COAST, 2 armed, 4 throttle on, 8 reversed, 16 stall, 32 controller uses the calculated phase). The last five:
+Iq of the last 100 ms computed two ways from the same samples - from the 3 measured phases and with the short-window
+phase calculated from the other two - as average and scatter (standard deviation), plus the share of samples where a
+phase was calculated. The dashboard shows them side by side under the Current chart (◀ = the one in use).
 
 ## Bus protection (steps 3–5)
 A torque against the rotation makes the motor a generator; a bench supply cannot take that energy back and the

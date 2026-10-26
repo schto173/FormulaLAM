@@ -155,15 +155,28 @@ class TwoPhaseLowside : public LowsideCurrentSense {
   using LowsideCurrentSense::LowsideCurrentSense;
   bool recon = false;                                // switched on after initFOC (its checks drive single phases)
   uint32_t nAll = 0, nRecon = 0;                     // statistics for the status line
+  // Side-by-side comparison for the data line: Iq from the three measured phases AND Iq with the calculated phase,
+  // from the same samples and the same rotor angle, whichever one the controller uses. Collected only in data mode.
+  // Per data line: n samples, sum and sum of squares (around ref = Iq at the start, keeps the float sums small).
+  bool compare = false;
+  uint32_t cmpN = 0, cmpHigh = 0;
+  float cmpRef = 0, mSum = 0, mSq = 0, cSum = 0, cSq = 0;
+  void cmpReset(float ref) { cmpN = cmpHigh = 0; cmpRef = ref; mSum = mSq = cSum = cSq = 0; }
   PhaseCurrent_s getPhaseCurrents() override {
-    PhaseCurrent_s c = LowsideCurrentSense::getPhaseCurrents();
+    PhaseCurrent_s c = LowsideCurrentSense::getPhaseCurrents(), r = c;
     nAll++;
-    if (!recon) return c;
     float da = ::driver.dc_a, db = ::driver.dc_b, dc = ::driver.dc_c, m = max(da, max(db, dc));   // our global driver
-    if (m < RECON_DUTY) return c;
-    if (m == da) c.a = -(c.b + c.c); else if (m == db) c.b = -(c.a + c.c); else c.c = -(c.a + c.b);
+    bool high = (m >= RECON_DUTY);                   // one window too short: calculate that phase
+    if (high) { if (m == da) r.a = -(r.b + r.c); else if (m == db) r.b = -(r.a + r.c); else r.c = -(r.a + r.b); }
+    if (compare) {
+      float ang = ::motor.electrical_angle;            // set by loopFOC just before it reads the currents
+      float qm = getDQCurrents(getABCurrents(c), ang).q - cmpRef;
+      float qc = high ? getDQCurrents(getABCurrents(r), ang).q - cmpRef : qm;
+      mSum += qm; mSq += qm * qm; cSum += qc; cSq += qc * qc; cmpN++; if (high) cmpHigh++;
+    }
+    if (!recon || !high) return c;
     nRecon++;
-    return c;
+    return r;
   }
 };
 TwoPhaseLowside current_sense = TwoPhaseLowside(SHUNT_OHMS, CSA_GAIN, PIN_SOA, PIN_SOB, PIN_SOC);
@@ -186,7 +199,9 @@ static bool dataOn = false;
 static float lastFet = NAN, lastMot = NAN, lastVb = NAN, lastLim = 0.0f;
 void doData(char *cmd) {
   dataOn = (cmd[0] == '1');
-  Serial.println(dataOn ? "data mode ON (D0 = off): $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags"
+  current_sense.cmpReset(motor.current.q); current_sense.compare = dataOn;
+  Serial.println(dataOn ? "data mode ON (D0 = off): $D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags,"
+                          "iq_meas,sd_meas,iq_calc,sd_calc,calc%"
                         : "data mode OFF");
 }
 static float capFraction = FOC_MAX_FRACTION;       // "V<fraction>": voltage cap <= capFraction x Vbus
@@ -584,7 +599,10 @@ static void temperatureTask() {
 }
 
 // Data mode: one line every 100 ms, numbers only. flags: 1 = COAST, 2 = throttle armed, 4 = throttle on,
-// 8 = direction reversed, 16 = stall guard tripped. Speeds are forward-positive (step 5).
+// 8 = direction reversed, 16 = stall guard tripped, 32 = controller uses the calculated phase (X1).
+// Speeds are forward-positive (step 5). At the end: unfiltered Iq of the last 100 ms, average and scatter
+// (standard deviation), once from the 3 measured phases and once with the calculated phase, and the share of
+// samples where a phase was calculated. Same samples -> the smaller scatter is the more accurate measurement.
 static void dataTask() {
   static uint32_t t = 0;
   if (!dataOn || millis() - t < 100) return;
@@ -602,6 +620,7 @@ static void dataTask() {
   const float kmh = 1.0f;                            // no gearing known outside step 5: km/h fields = rad/s
   const float vel = motor.shaft_velocity;
 #endif
+  if (current_sense.recon) flags |= 32;
   Serial.print("$D,"); Serial.print(t); Serial.print(',');
   Serial.print(thr, 0); Serial.print(','); Serial.print(set, 1); Serial.print(',');
   Serial.print(vel / kmh, 1); Serial.print(','); Serial.print(vel, 1); Serial.print(',');
@@ -609,7 +628,13 @@ static void dataTask() {
   Serial.print(motor.voltage.q, 2); Serial.print(','); Serial.print(motor.voltage.d, 2); Serial.print(',');
   Serial.print(motor.voltage_limit, 1); Serial.print(','); Serial.print(lastLim, 1); Serial.print(',');
   Serial.print(lastFet, 1); Serial.print(','); Serial.print(lastMot, 1); Serial.print(',');
-  Serial.print(lastVb, 1); Serial.print(','); Serial.println(flags);
+  Serial.print(lastVb, 1); Serial.print(','); Serial.print(flags);
+  TwoPhaseLowside &cs = current_sense;
+  const float n = cs.cmpN ? (float)cs.cmpN : 1.0f, mm = cs.mSum / n, cm = cs.cSum / n;
+  Serial.print(','); Serial.print(cs.cmpRef + mm, 2); Serial.print(','); Serial.print(sqrtf(max(0.0f, cs.mSq / n - mm * mm)), 3);
+  Serial.print(','); Serial.print(cs.cmpRef + cm, 2); Serial.print(','); Serial.print(sqrtf(max(0.0f, cs.cSq / n - cm * cm)), 3);
+  Serial.print(','); Serial.println(cs.cmpN ? 100.0f * cs.cmpHigh / cs.cmpN : 0.0f, 0);
+  cs.cmpReset(motor.current.q);
 }
 
 void loop() {

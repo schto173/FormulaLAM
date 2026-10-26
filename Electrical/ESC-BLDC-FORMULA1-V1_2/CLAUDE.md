@@ -107,6 +107,8 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     status line shows `recon x %`. Voltage fraction now live: `V0.45` (start) .. `V0.55` (`FOC_FRACTION_LIMIT`;
     2nd-highest phase keeps >= 4.4 us), cap max 24 V; speed limit still 40 km/h, so more voltage = more headroom /
     40 km/h also with a sagging pack. Plan: compare Iq scatter at top speed X0 vs X1 at 0.45, then V0.50, V0.55.
+    In data mode the firmware computes Iq both ways every cycle from the same samples (`$D` fields iq_meas, sd_meas,
+    iq_calc, sd_calc, calc%), the dashboard shows them side by side - no X0/X1 toggling needed for the comparison.
   - Bus electrolytics C11/C21 = Samyoung NXA 330 uF 100 V (1.65 A ripple @100 kHz, 36 mOhm): ripple per cap ~2.1 A at
     10 A, ~4.1 A at 20 A motor current -> 20 A bursts ok, continuous 20 A too much; V2: bigger bus capacitor bank.
   - **Stall (2026-10-21):** wheel held with the brake + throttle -> motor buzzed ("brrrr", a rotating "whhht") without

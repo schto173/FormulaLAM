@@ -77,6 +77,8 @@ canvas { display: block; width: 100%; }
 .chart .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
 .chart .legend b { color: var(--ink); font-weight: 650; }
 .chart .legend .lv { color: var(--ink); font-variant-numeric: tabular-nums; }
+.chart .legend .cmp { flex-basis: 100%; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.chart .legend .cmp .use { color: var(--accent); font-weight: 700; min-width: 1em; margin-right: 6px; }
 .sw { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
 .chart canvas { flex: 1 1 0; min-height: 0; cursor: crosshair; }
 .trip { flex: 0 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
@@ -179,7 +181,11 @@ button.go { flex: 1; padding: 8px; }
       <div class="panel chart"><div class="legend"><b>Current</b>
         <span><i class="sw" style="background:var(--c1)"></i>Iq <span class="lv" data-k="iq">–</span></span>
         <span><i class="sw" style="background:var(--c3)"></i>Id <span class="lv" data-k="id">–</span></span>
-        <span><i class="sw" style="background:var(--c5)"></i>limit <span class="lv" data-k="ilim">–</span></span><span>A</span></div>
+        <span><i class="sw" style="background:var(--c5)"></i>limit <span class="lv" data-k="ilim">–</span></span><span>A</span>
+        <span class="cmp" title="same samples, two ways: Iq from the 3 measured phases / with the short-window phase calculated from the other two. Average ± scatter of the last 100 ms - smaller scatter = more accurate. calc = share of samples with a calculated phase. ◀ = the one the controller uses (X1 / X0)">
+          <i class="sw" style="background:var(--c2)"></i>meas <span class="lv" data-k="iqm">–</span>±<span class="lv" data-k="sdm" data-d="2">–</span><span class="use" id="useM"></span>
+          <i class="sw" style="background:var(--c4)"></i>calc <span class="lv" data-k="iqc">–</span>±<span class="lv" data-k="sdc" data-d="2">–</span><span class="use" id="useC"></span>
+          <span class="hint"><span class="lv" data-k="cpct" data-d="0">–</span> % calc'd</span></span></div>
         <canvas id="ch-cur"></canvas></div>
       <div class="panel chart"><div class="legend"><b>Temperature</b>
         <span><i class="sw" style="background:var(--c5)"></i>FET <span class="lv" data-k="fet">–</span></span>
@@ -252,7 +258,9 @@ button.go { flex: 1; padding: 8px; }
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const FIELDS = ["ms","thr","set","kmh","rads","iq","id","uq","ud","umax","ilim","fet","mot","vbus","flags"];
+const FIELDS = ["ms","thr","set","kmh","rads","iq","id","uq","ud","umax","ilim","fet","mot","vbus","flags",
+                "iqm","sdm","iqc","sdc","cpct"];   // last 5: measured vs calculated Iq (newer firmware only)
+const FIELDS_MIN = 15;
 const DERIVED = ["pw","ibat","wh","km"];
 const log = [];                   // {pc, ...FIELDS, ...DERIVED, note?}
 const marks = [];                 // {pc, text}
@@ -317,9 +325,9 @@ async function send(text) {
 function handleLine(line) {
   if (line.startsWith("$D,")) {
     const p = line.slice(3).split(",").map(Number);
-    if (p.length < FIELDS.length) return;
+    if (p.length < FIELDS_MIN) return;
     const r = { pc: Date.now() };
-    FIELDS.forEach((f, k) => r[f] = p[k]);
+    FIELDS.forEach((f, k) => r[f] = k < p.length ? p[k] : NaN);
     addRecord(r);
     return;
   }
@@ -491,7 +499,7 @@ function bar(cv, o) {
 // ---- line charts (shared time axis, synchronized crosshair) -------------------------------------------------
 const charts = [
   { id: "ch-speed", series: [["kmh", "--c1", true], ["set", "--c2"]], min0: true },
-  { id: "ch-cur",   series: [["iq", "--c1", true], ["id", "--c3"], ["ilim", "--c5", false, true]], min0: false },
+  { id: "ch-cur",   series: [["iq", "--c1", true], ["id", "--c3"], ["ilim", "--c5", false, true], ["sdm", "--c2"], ["sdc", "--c4"]], min0: false },
   { id: "ch-temp",  series: [["fet", "--c5", true], ["mot", "--c2"]], min0: false, guides: () => [[Number($("gFet").value), "--warn"]] },
   { id: "ch-pow",   series: [["pw", "--c4", true], ["uq", "--c1"], ["umax", "--c5", false, true]], min0: true },
 ];
@@ -566,8 +574,14 @@ function drawCharts() {
     const rec = hoverRec || data[data.length - 1];
     cv.parentElement.querySelectorAll(".lv").forEach((el) => {
       const v = rec ? rec[el.dataset.k] : NaN;
-      el.textContent = isFinite(v) ? v.toFixed(Math.abs(v) >= 100 ? 0 : 1) : "–";
+      const d = el.dataset.d !== undefined ? Number(el.dataset.d) : Math.abs(v) >= 100 ? 0 : 1;
+      el.textContent = isFinite(v) ? v.toFixed(d) : "–";
     });
+    if (ch.id === "ch-cur") {
+      const known = rec && isFinite(rec.iqc);
+      $("useM").textContent = known && !(rec.flags & 32) ? "◀" : "";
+      $("useC").textContent = known && (rec.flags & 32) ? "◀" : "";
+    }
   }
 }
 
@@ -648,7 +662,7 @@ $("save").onclick = () => {
 };
 
 // ---- demo (synthetic data, no board) ------------------------------------------------------------------------
-const demo = { thr: 0, iCmd: 0, w: 0, fet: 24, mot: 22, lim: 10, cap: 24, on: true, armed: true, t: 0 };
+const demo = { thr: 0, iCmd: 0, w: 0, fet: 24, mot: 22, lim: 10, cap: 24, recon: true, on: true, armed: true, t: 0 };
 $("demo").onclick = () => demoTimer ? stopDemo() : startDemo();
 function startDemo() {
   if (port) return;
@@ -668,6 +682,7 @@ function demoCommand(c) {
   else if (c === "A0") demo.armed = false; else if (c === "A1") demo.armed = true;
   else if (c === "R0" || c === "R1") demo.rev = c === "R0";
   else if (/^L[\d.]+$/.test(c)) demo.lim = Math.min(20, Number(c.slice(1)));
+  else if (c === "X1" || c === "X0") demo.recon = (c === "X1");
   else if (/^MLU[\d.]+$/.test(c)) demo.cap = Math.min(24, Number(c.slice(3)));
   setTimeout(() => addConsole("ok (demo)"), 60);
 }
@@ -687,10 +702,12 @@ function demoStep() {
   const uq = 0.048 * d.w + 0.1 * iq, vbus = vbus0 - iq * 0.12;
   d.fet += (24 + 0.16 * d.iCmd * d.iCmd - d.fet) * dt / 40;
   d.mot += (22 + 0.09 * d.iCmd * d.iCmd - d.mot) * dt / 120;
-  const flags = (d.thr <= 0 && d.w < 1 ? 1 : 0) | (d.armed ? 2 : 0) | 4 | (d.rev ? 8 : 0);
+  const flags = (d.thr <= 0 && d.w < 1 ? 1 : 0) | (d.armed ? 2 : 0) | 4 | (d.rev ? 8 : 0) | (d.recon ? 32 : 0);
+  const cpct = Math.max(0, Math.min(33, (uq / cap - 0.6) * 80)), sdc = 0.08 + 0.01 * d.iCmd, sdm = sdc + cpct * 0.02;
   handleLine(["$D", Math.round(d.t * 1000), d.thr.toFixed(0), set.toFixed(1), kmh.toFixed(1), d.w.toFixed(1), iq.toFixed(2),
     ((Math.random() - .5) * 0.2).toFixed(2), uq.toFixed(2), "0.05", cap.toFixed(1), d.lim.toFixed(1),
-    d.fet.toFixed(1), d.mot.toFixed(1), vbus.toFixed(1), flags].join(","));
+    d.fet.toFixed(1), d.mot.toFixed(1), vbus.toFixed(1), flags,
+    (iq + (Math.random() - .5) * cpct * 0.01).toFixed(2), sdm.toFixed(3), iq.toFixed(2), sdc.toFixed(3), cpct.toFixed(0)].join(","));
   if (Math.round(d.t * 10) % 10 === 0)
     addConsole("# target " + d.iCmd.toFixed(2) + " | speed " + d.w.toFixed(1) + " rad/s | Uq " + uq.toFixed(2) + " V | Vbus " + vbus.toFixed(1) + " V");
 }
