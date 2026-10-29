@@ -48,3 +48,10 @@ weigh, not plans.
 - **Smaller motor** with less iron, e.g. Flipsky 6354 140 KV (fits ~8:1 and 12S). First measure the 7070's
   no-load battery power at ~1500 / 2500 / 3500 rpm to see how much there is to gain.
 - Tyre pressure, wheel alignment, brake drag and aerodynamics are worth more per km than most electronics changes.
+- **Long term: in-wheel (rim) motor**, as many top Shell Eco-marathon teams use – magnets on the wheel/rim, three
+  coil groups on a fixed carrier beside them, often coreless (ironless) axial-flux. No gear/chain losses (3–5 %),
+  no iron losses (the 7070's ~5–8 W spinning loss) and no cogging; good ones reach ~95–97 % at a few tens of watts.
+  Costs: a real mechanical project (precise air gap, magnet arrays, coil winding, stiff wheel). Coreless coils have
+  very little inductance -> needs a much higher PWM frequency (often 50–100 kHz), which shortens the low-side window
+  and makes low-side current sensing hard -> revisit inline sensing (`tools/optional/v2_sch_inline.py`). The DRV8353
+  itself can drive it (3-phase FOC, PWM up to 200 kHz).
