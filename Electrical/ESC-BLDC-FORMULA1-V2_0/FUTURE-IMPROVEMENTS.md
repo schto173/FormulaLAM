@@ -27,10 +27,12 @@ weigh, not plans.
 
 ## Hardware (V3 or later)
 
-- **Bulk capacitors: hybrid polymer** instead of the Samyoung NXA low-ESR electrolytics (1.65 A ripple, 36 mΩ each)
-  if long runs at 15–20 A are wanted: ~1.5× the ripple rating per capacitor and less ageing from heat. JLC stock is
-  thin (e.g. ChuangHui 220 µF 100 V 13x25, 2.4 A, 32 mΩ); otherwise Mouser/Digikey and hand soldering.
-  A pricier standard electrolytic is not automatically better (Nichicon PW 330 µF: only 1.08 A).
+- **Bulk capacitors:** the Samyoung NXA 330 µF 100 V low-ESR electrolytics (1.65 A ripple, 36 mΩ each) are already
+  one of the best choices at 100 V. Hybrid polymer capacitors only come small at 100 V (DigiKey through-hole: 10–15 µF,
+  ~1.4–1.7 A ripple each); the large hybrids stop at ~63 V, too low for a 50.4 V pack. Rare exception: ChuangHui
+  220 µF 100 V 13x25 (2.4 A, 32 mΩ) at JLC, very little stock. A pricier standard electrolytic is not automatically
+  better (Nichicon PW 330 µF: only 1.08 A). For long runs at 15–20 A: more capacitors of the same kind (V2 has three;
+  on V1.2 a third NXA can be soldered across the battery pads with short leads).
 - **Pi Zero 2 W + display supply:** give them their own 5 V converter from the battery – V2's 5 V comes from the
   DRV8353's 12 V buck (350 mA total) and cannot carry ~3 W extra.
 - Ideas from V2-PLAN not built yet: magnetic encoder on the motor shaft (MT6701 / AS5047P), battery energy meter
