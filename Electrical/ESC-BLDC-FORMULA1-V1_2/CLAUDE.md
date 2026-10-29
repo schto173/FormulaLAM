@@ -123,6 +123,8 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     speed, nFAULT) into a 1024-entry RAM ring; `halt()` prints it after any stop as `$B,...` lines (~7 s), the
     dashboard saves it automatically as `esc-blackbox-<time>.csv` (Downloads).
   - Direction back to normal (`MOTOR_DIRECTION 1`) with the new gearing; user is fitting a larger pinion for 35 km/h.
+  - 2026-10-29: pinion 15 -> 22 teeth -> **GEAR_RATIO 9.41** (13.8 x 15/22). Model at V0.50: ~35 km/h at 43 V under
+    load. The board still ran 04c5329 (13.8:1, REVERSED default, no black box) until this flash.
     Not a firmware limit (a VESC has the same one, except with field weakening = extra -Id, ~ -28 A at 40 km/h here).
     Options discussed: gearing ~10:1, higher-KV motor, more cells.
   - Bus electrolytics C11/C21 = Samyoung NXA 330 uF 100 V (1.65 A ripple @100 kHz, 36 mOhm): ripple per cap ~2.1 A at

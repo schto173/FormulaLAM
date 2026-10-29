@@ -84,7 +84,7 @@
 // while the motor is slower than the target; never negative (no braking - the freewheel hub can't pass it on).
 // The current rises at most CURRENT_RAMP_A_S (soft freewheel engagement) and drops at once. Released = 0 A,
 // the motor spins down, the car rolls; once the motor stands still the DRV goes to COAST (all FETs off).
-#define GEAR_RATIO        13.8f   // motor turns per wheel turn (13.8:1 since 2026-10-26, was 8:1)
+#define GEAR_RATIO        9.41f   // motor turns per wheel turn (2026-10-29: pinion 15 -> 22 teeth, 13.8 x 15/22; was 8:1, 13.8:1)
 #define WHEEL_DIAMETER_M  0.508f  // outer diameter with tyre (20" is often 0.48-0.50) <- CONFIRM
 #define SPEED_MAX_KMH     40.0f   // throttle 100 %
 #define MOTOR_DIRECTION   1       // +1 / -1: which way is forward (+1 = normal again with the new gearing 2026-10-26;
