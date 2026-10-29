@@ -1,0 +1,120 @@
+# ESC firmware - SOFTSTART variant (SimpleFOC)
+
+Copy of `../firmware` (as of 2026-10-29, gear 9.41:1) with two additions in step 5 (`board.h`):
+- **Launch curve** (`LAUNCH_CURVE`): current limit follows the motor speed, linear 20 A at 0 km/h -> 15 A at 7 km/h
+  -> 10 A from 15 km/h; 5 A/s ramp below 7 km/h, 2 A/s above. `L` still caps everything.
+- **Clutch take-up** (`TAKEUP_*`): throttle pressed with the motor below 2 km/h -> for 1 s the motor only creeps at
+  ~1 km/h with at most 4 A (takes up the clutch slack gently), then the launch curve takes over.
+The original firmware stays in `../firmware`. This folder builds into its own PlatformIO workspace
+(`ws/esc-hat-softstart`), so both can be built and flashed side by side.
+
+
+## Setup (once)
+1. Install **VS Code** and the **PlatformIO IDE** extension.
+2. Install the **ST-LINK USB driver** (STSW-LINK009 from st.com) so Windows sees the Nucleo.
+3. Open this `firmware` folder in VS Code (File → Open Folder). PlatformIO downloads the STM32
+   toolchain and SimpleFOC by itself the first time (a few minutes).
+4. Nucleo: jumper **JP5 on E5V**, plug it onto the ESC board, USB cable to the PC.
+
+## Step 0: first power-up, no Nucleo, no motor (no firmware needed)
+1. Look the board over: solder bridges on U1 (DRV8353, QFN), U4, the FETs; all parts there, polarised parts
+   the right way round (D8, the two 330 µF caps).
+2. Multimeter, supply **off**: no short from BAT+ (fuse side) to GND, +5 V (J9 pin 1) to GND, and each phase pad
+   to GND and to BAT+. Readings that start low and climb are just the capacitors charging; that is fine.
+3. Bench supply **24 V, current limit 0.1 A**, fuse in F1, Nucleo **not** plugged in. Switch on and watch the
+   current: it should settle at a few mA to a few tens of mA. If it sits at the limit, switch off.
+4. Measure (black probe on J9 pin 4 = GND):
+   - **5.0 V** on J9 pin 1 (LM5164, for the Nucleo)
+   - **12.1 V** across C24 (DRV8353 buck = gate-drive supply)
+5. Optional: turn the supply down slowly. 5 V should drop out at about 16.8 V and come back at about 18 V.
+6. Switch off, set Nucleo jumper **JP5 to E5V**, plug the Nucleo in (USB towards the left board edge),
+   switch on again: the green LED D3 (3.3 V) lights. Then plug in USB and go to step 1.
+
+## Steps
+Pick the environment at the bottom of VS Code (or in the PlatformIO sidebar), click **Upload and
+Monitor**. Do them in order.
+
+| Env | Motor | Supply | What you should see |
+|---|---|---|---|
+| `1_drv_check` | not needed | bench supply **20–24 V**, current limit 0.3 A | all settings `ok`, "SPI OK", no faults, plausible bus voltage, FET temperature, motor sensor resistance + type guess |
+| `2_hall_test` | connected, turn by hand | same | states 1–6 only, never 0 or 7; one wheel turn → pole pairs |
+| `3_open_loop` | connected | 20–24 V, limit ~1 A | motor turns slowly and smoothly. `T5` = faster, `T-5` = reverse, `T0` stop |
+| `4_closed_loop` | connected | same | alignment wiggle at start, then `T0.1` … `T0.5` (volts, capped at `VOLTAGE_LIMIT`) gives torque |
+| `5_foc_current` | connected | same, later the battery | first `MFP0.4` (measures R and L), then `MFC200` (sets the current PI); then `T0.5` … `T2` (amps) gives torque, `Iq` in the status line follows the target |
+
+**Supply voltage:** the 5 V regulator (LM5164) only switches on above **18 V** (EN/UVLO divider R63/R64,
+off again below 16.8 V). Below that the Nucleo stays dark, so always bring up at 20–24 V.
+
+Before step 3: put the real pole pair count from step 2 into `POLE_PAIRS` in `include/board.h`.
+
+## Drive mode (step 5): throttle = maximum speed
+Throttle on J7 (1 = 3.3 V, 2 = signal, 3 = GND). The throttle is **not** the current: 0–100 % sets the
+**maximum speed** 0–40 km/h (`SPEED_MAX_KMH`). While the motor is slower than that, a speed controller asks for
+current, `SPEED_P_A_PER_KMH` = 2 A per km/h too slow, limited to 0–10 A (`CURRENT_LIMIT`, hard). The current
+rises at most 2 A/s (`CURRENT_RAMP_A_S`, soft freewheel engagement) and drops at once. It is never negative:
+no braking (the freewheel hub can't pass it on). Released = 0 A: the motor spins down, the car rolls; once the
+motor stands still the DRV goes to COAST (all FETs off). Speeds are converted with `GEAR_RATIO` and
+`WHEEL_DIAMETER_M` in `include/board.h` (8:1, 0.508 m - **confirm for the car**).
+Physics: 10 A ≈ 1 Nm at the motor → at 8:1 and 100 kg at most ~1 km/h per second on the flat.
+
+The throttle is on after start-up but only acts after it has been released once ("armed"). Commands: `A` status,
+`AI` idle = now (released), `AF` full = now (pressed fully), `A0` off (then `T<amps>` sets the current directly,
+test mode), `A1` on. Put the calibrated volts into `THROTTLE_IDLE_V` / `THROTTLE_FULL_V`.
+
+Voltage cap: `FOC_VOLTAGE_MAX` 17 V (enough for 40 km/h), but never above 0.40 × Vbus (`FOC_MAX_FRACTION`), so
+with a nearly empty pack the top speed drops (42–50 V: 40 km/h, 38 V: ~36, 36 V: ~34). The target speed is
+limited to what the cap can deliver, so the controller never runs into the voltage limit. `MLU<volts>` lowers
+the cap for a test. The total voltage |Uq, Ud| is limited to the cap (`CappedMotor`), so the PWM never clips.
+
+## PC dashboard
+`dashboard/esc-dashboard.html`: open it in **Edge or Chrome** (no install, works offline), close the VS Code serial
+monitor, **Connect**, pick the Nucleo's COM port, **Data ON** (sends `D1`). **Demo** plays synthetic data without
+a board. One screen from ~1280 x 720 (smaller windows scroll).
+- Instruments: speedometer (target needle), current and voltage-headroom dials, FET/motor/battery/throttle bars.
+- Graphs: speed, current, temperature, power & voltage; synchronized crosshair (hover), pause, named markers.
+- Efficiency (PC-side estimates): motor power 1.5 (Uq Iq + Ud Id), battery current, energy Wh, distance, Wh/km.
+- Controls: STOP (`A0`+`ME0`, also the Esc key), Enable (`ME1`+`A1`, standstill only), current limit `L`,
+  voltage cap `MLU`, direction `R1` normal / `R0` reversed (standstill only; after a reset `MOTOR_DIRECTION`
+  in board.h applies), throttle on/off/calibration. Every sent command is echoed in the message window.
+- Load-test guard (on by default, switchable): sends STOP once if the FET/motor temperature reaches the set
+  limit (60 / 85 °C), re-arms after cooling 5 °C. Save CSV: all data + derived values + markers.
+Firmware data line (`D1` = every 100 ms, `D0` off, off after reset):
+`$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags,iq_meas,sd_meas,iq_calc,sd_calc,calc%`
+(flags 1 COAST, 2 armed, 4 throttle on, 8 reversed, 16 stall, 32 controller uses the calculated phase). The last five:
+Iq of the last 100 ms computed two ways from the same samples - from the 3 measured phases and with the short-window
+phase calculated from the other two - as average and scatter (standard deviation), plus the share of samples where a
+phase was calculated. The dashboard shows them side by side under the Current chart (◀ = the one in use).
+
+## Bus protection (steps 3–5)
+A torque against the rotation makes the motor a generator; a bench supply cannot take that energy back and the
+bus capacitors would charge far above 60 V. So: a target against the rotation (above 3 rad/s) becomes 0 (coast),
+`MLU` can't be lowered while spinning, the bus is checked every 1 ms and the driver switches off above
+`BUS_OV_LIMIT` (40 V for the bench; raise it for the battery). The PWM follows the measured bus voltage.
+
+## Battery (12S Li-ion): environment `5_foc_battery`
+Same as step 5, built with `-D BATTERY_CELLS=12`: refuses to start below 36.0 V (3.0 V/cell) or above 51.6 V,
+over-voltage stop at 55.4 V, stop when below 36.0 V (3.0 V/cell) for more than 2 s, voltage cap 17 V / 0.40 × Vbus.
+The bench build (`5_foc_current`) refuses to start above 35 V, so it can't run on the pack by mistake.
+Before the first connection: polarity checked with a multimeter (the board has **no reverse-polarity
+protection**), anti-spark plug (XT90-S) for the 660 µF inrush, a small fuse in F1 for the first tests.
+
+## Temperatures
+- **FET temperature** (NTC TH1 next to Q4) is always active.
+- **Motor temperature** (white wire, J8 pin 6): the sensor type is not known yet. Step 1 prints its resistance
+  and a guess (at room temperature: ~10 kΩ = NTC 10k, ~600 Ω = KTY84, ~1.1 kΩ = PT1000). Set
+  `MOTOR_TEMP_SENSOR` in `include/board.h` accordingly (for an NTC also check `MOTOR_NTC_BETA`, usually 3950).
+- Steps 3–5 print a `# … | FET … | motor … | Vbus …` line every second. Hard stop at `FET_TEMP_STOP` (90 °C) /
+  `MOTOR_TEMP_STOP` (100 °C), no derating.
+- All slow analog values (temperatures, throttle, bus voltage) are read through `include/analog_in.h`.
+  **Never use `analogRead()` once the motor runs**: the STM32 core resets ADC1 and ADC2 after every
+  `analogRead()`, which destroys SimpleFOC's current sensing.
+
+## If something goes wrong
+- **"SPI FAILED"** in step 1: supply below 9 V, EN not high, or a wrong/missing Nucleo jumper.
+- **DRV fault `VDS_…`**: overcurrent seen across a FET. Lower `VOLTAGE_LIMIT`, check for a short.
+- **`GDF` / `VGS_…`**: a gate did not switch. Check the bootstrap capacitors and that phase wire.
+- **initFOC fails / motor jerks in step 4**: wrong pole pairs, or swap two hall wires (or two phases).
+- **Current reads the wrong sign in step 5**: SimpleFOC corrects this during initFOC; if it reports
+  a problem, set `CSA_GAIN` to `-20.0f` in `board.h`.
+
+Only raise the voltage towards 58 V once steps 3–5 run cleanly at low voltage.
