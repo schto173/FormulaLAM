@@ -9,8 +9,11 @@ Copy of `../firmware` (as of 2026-10-29, gear 9.41:1) with two additions in step
 the current crept up at 5 A/s. Now: launch curve 30 A at 0 km/h -> 20 A at 7 -> 10 A from 15 km/h, rise 30 A/s
 below 7 km/h, hard max (`CURRENT_MAX`) 30 A. For that the DRV8353 current amplifier runs at gain 10 instead of 20
 (range +-70 A instead of +-35 A; `CSA_CTRL` 0x240, `CSA_GAIN` 10). The 330 uF bus caps limit *continuous* current
-(~3 A ripple each at 15 A vs 1.65 A rated): 30 A only for the launch, then 15 A but at most 30 s in a row above
-10 A (`BURST_*`), then 10 A until the current was <= 10 A for 30 s. A 3rd cap would allow 15 A without the limit.
+(~3 A ripple each at 15 A vs 1.65 A rated): 30 A only for the launch, then 15 A from a 30 s time account above
+10 A (`BURST_*`: seconds above 10 A at >= 7 km/h add up, seconds at <= 10 A pay back; full -> 10 A above 7 km/h).
+The launch below 7 km/h is never limited. A 3rd cap would allow 15 A without the limit. On the pack a forward
+push is allowed while the motor still turns backwards slower than 40 rad/s (`NO_REGEN_PUSH_SPEED`): after the
+clutch take-up the drivetrain springs back and the no-regen rule used to block the launch.
 The original firmware stays in `../firmware`. This folder builds into its own PlatformIO workspace
 (`ws/esc-hat-softstart`), so both can be built and flashed side by side.
 

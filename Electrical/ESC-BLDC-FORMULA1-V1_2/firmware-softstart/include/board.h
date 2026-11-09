@@ -64,7 +64,13 @@
 #define BUS_START_MAX     (BATTERY_CELLS * 4.30f)         // 12S: 51.6 V - above: wrong pack, refuse to start
 #define BUS_UV_STOP       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - below for more than 2 s: stop (empty)
 #define ALIGN_V_BUS       1.2f    // V for hall + current-sense alignment on the pack (~0.6-0.7 V lost at 45 V)
+// Drive torque while the motor still turns slowly BACKWARDS (2026-11-09: after the clutch take-up the drivetrain
+// springs back, -0.6..-2 km/h, and the no-regen rule blocked the whole launch). Pushing forward against a slow
+// backward rotation feeds (almost) nothing back: the back-EMF (0.048 V per rad/s) stays below the R x I drop
+// (~2 V at 20 A) up to ~40 rad/s, and a 12S pack takes a few W anyway; BUS_OV_LIMIT still watches the bus.
+#define NO_REGEN_PUSH_SPEED 40.0f // rad/s backwards (~4 km/h at 9.41:1) up to which a forward push is allowed
 #else
+#define NO_REGEN_PUSH_SPEED NO_REGEN_SPEED   // bench supply: no exception
 #define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
 #define BUS_START_MAX     35.0f
 #define BUS_UV_STOP       0.0f    // no under-voltage stop on the bench
@@ -105,12 +111,14 @@
 #define LAUNCH_RAMP_A_S   30.0f   // A/s rise below the 2nd point: full launch current within ~1 s after the take-up
                                   //   (was 5: the car stood still ~3 s while the current crept up to ~15 A)
 // Time limit above BURST_BASE_A (2026-11-09), protects the two 330 uF bus caps (~3 A ripple each at 15 A vs 1.65 A
-// rated; they need minutes to heat up): at most BURST_MS in a row above BURST_BASE_A, then the limit is BURST_BASE_A
-// until the current has stayed at or below it for BURST_REST_MS. Every normal launch + acceleration fits in it,
-// only a long hill (or a strong headwind) falls back to 10 A for a while.
+// rated; they need minutes to heat up). A time account: every second above BURST_BASE_A at or above BURST_FROM_KMH
+// adds a second, every second at or below BURST_BASE_A (driving slower, coasting, standing) takes one off. Full
+// (BURST_MS) -> limit BURST_BASE_A above BURST_FROM_KMH until the account is empty again (30 s at <= 10 A).
+// The launch below BURST_FROM_KMH neither counts nor is limited: low speed = low voltage = little cap ripple.
+// (First version needed 30 s rest IN A ROW and counted the launch: short stops added up and the 3rd launch got 10 A.)
 #define BURST_BASE_A      10.0f   // A
-#define BURST_MS          30000   // ms above BURST_BASE_A in a row
-#define BURST_REST_MS     30000   // ms at or below BURST_BASE_A to get the full limit back
+#define BURST_MS          30000   // ms in the account -> hold at BURST_BASE_A
+#define BURST_FROM_KMH    7.0f    // km/h (motor): counts and holds only at or above this speed
 // Clutch take-up (2026-10-29): the clutch engages hard after ~1/3 turn of slack. Throttle pressed with the motor
 // (almost) stopped -> for TAKEUP_MS the motor only creeps at TAKEUP_KMH with at most TAKEUP_AMPS (enough for the
 // ~2 A cogging, too little to slam the clutch), whatever the pedal does; then the launch curve takes over.

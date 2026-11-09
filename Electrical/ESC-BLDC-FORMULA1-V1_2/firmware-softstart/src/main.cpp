@@ -331,10 +331,11 @@ static void busTask() {
   if (vb > BUS_OV_LIMIT) halt("bus over-voltage - energy pumped back into a supply that cannot take it?");
 }
 
-// No regenerative braking: a torque target against the rotation (above NO_REGEN_SPEED) becomes 0 = coast.
+// No regenerative braking: a torque target against the rotation (above NO_REGEN_PUSH_SPEED: bench 3 rad/s, pack
+// 40 rad/s, see board.h) becomes 0 = coast.
 static void noRegenTask() {
   if (motor.controller != MotionControlType::torque) return;
-  if (motor.target * motor.shaft_velocity < 0.0f && fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
+  if (motor.target * motor.shaft_velocity < 0.0f && fabsf(motor.shaft_velocity) > NO_REGEN_PUSH_SPEED) {
     motor.target = 0.0f;
     static uint32_t tw = 0;
     if (millis() - tw > 1000) { tw = millis(); Serial.println("# no regen: target against the rotation -> 0, wait until it stops"); }
@@ -347,7 +348,7 @@ static const float RADS_PER_KMH = GEAR_RATIO / (WHEEL_DIAMETER_M / 2.0f) / 3.6f;
 static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
 static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrPct = 0.0f;
 static float iCmd = 0.0f, vSetKmh = 0.0f, vMaxKmh = 0.0f;
-static uint32_t burstMs = 0, restMs = 0;           // time above / at-or-below BURST_BASE_A (board.h)
+static uint32_t burstMs = 0;                        // time account above BURST_BASE_A (board.h)
 static bool burstHold = false;                      // used up -> limit BURST_BASE_A until rested
 static bool stalled = false;                         // stall guard tripped, cleared when the throttle re-arms
 // drive direction: +1 normal, -1 reversed. Flips the sign of the current command and of the measured speed in
@@ -420,11 +421,12 @@ static void throttleTask() {
   t = now;
   // time limit above BURST_BASE_A (board.h): count while the current is above it, rest while at or below it
   const uint32_t dms = (uint32_t)(dt * 1000.0f);
-  if (iCmd > BURST_BASE_A + 0.05f) { burstMs += dms; restMs = 0; }
-  else if (restMs < BURST_REST_MS && (restMs += dms) >= BURST_REST_MS) burstMs = 0;
+  const bool above = iCmd > BURST_BASE_A + 0.05f;
+  if (above && fabsf(fwdVelocity()) >= BURST_FROM_KMH * RADS_PER_KMH) burstMs += dms;
+  else if (!above) burstMs = (burstMs > dms) ? burstMs - dms : 0;
   if (!burstHold && burstMs >= BURST_MS) {
     burstHold = true;
-    Serial.println("# time limit: 30 s above 10 A -> 10 A until the current has been at or below 10 A for 30 s (bus caps)");
+    Serial.println("# time limit: 30 s above 10 A -> 10 A above 7 km/h until 30 s at or below 10 A paid it back (bus caps)");
   } else if (burstHold && burstMs == 0) {
     burstHold = false;
     Serial.println("# time limit over: full current available again");
@@ -457,7 +459,7 @@ static void throttleTask() {
 #else
   float iMax = limitBase, ramp = CURRENT_RAMP_A_S;
 #endif
-  if (burstHold) iMax = min(iMax, BURST_BASE_A);
+  if (burstHold && fabsf(vKmh) >= BURST_FROM_KMH) iMax = min(iMax, BURST_BASE_A);   // the launch stays free
   bool pressed = x > 0.0f;
   if (pressed && !wasPressed && fabsf(vKmh) < TAKEUP_BELOW_KMH) tTake = now ? now : 1;   // new press from (near) standstill
   if (!pressed) tTake = 0;
