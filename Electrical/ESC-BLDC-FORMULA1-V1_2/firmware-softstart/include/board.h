@@ -13,7 +13,8 @@
 #define ALIGN_VOLTAGE     0.8f    // V used to align the halls in steps 4-5 on the bench (was 0.4 in 6x mode)
 #define VOLTAGE_LIMIT     1.0f    // V max applied to the motor in steps 3-4 (was 0.5 in 6x mode)
 #define CURRENT_LIMIT     10.0f   // A motor current limit after every start (step 5)
-#define CURRENT_MAX       20.0f   // A HARD maximum - "L" can raise the limit up to this, never above (2026-10-21).
+#define CURRENT_MAX       30.0f   // A HARD maximum - "L" can raise the limit up to this, never above (30 A for the
+                                  //   launch since 2026-11-09; was 20; needs CSA gain 10 = +-70 A range)
                                   //   20 A at 45 V continuous: ~12-15 W in the FETs (too much without heatsink -
                                   //   bursts only), battery ~10 A -> 20 A fuse + BMS discharge limit; VDS OCP 0.3 V
                                   //   still above 25 A peak x 8 mOhm hot. Edges clean at max load (scope, board #2).
@@ -98,8 +99,10 @@
 #define LAUNCH_CURVE      1       // 1 = speed-dependent limit below (start limit = CURRENT_MAX), 0 = flat limit
 #define LAUNCH_POINTS     3
 #define LAUNCH_KMH        { 0.0f,  7.0f, 15.0f }   // km/h (motor speed)
-#define LAUNCH_AMPS       { 20.0f, 15.0f, 10.0f }  // A at those speeds (20 A only for a few seconds per start; 10 A floor)
-#define LAUNCH_RAMP_A_S   5.0f    // A/s rise below the 2nd point (so the 20 A arrive during the launch)
+#define LAUNCH_AMPS       { 30.0f, 20.0f, 10.0f }  // A at those speeds (30 A only for a few seconds per start; 10 A floor)
+                                                   //   2026-11-09: car needs ~12-15 A just to break away (log)
+#define LAUNCH_RAMP_A_S   30.0f   // A/s rise below the 2nd point: full launch current within ~1 s after the take-up
+                                  //   (was 5: the car stood still ~3 s while the current crept up to ~15 A)
 // Clutch take-up (2026-10-29): the clutch engages hard after ~1/3 turn of slack. Throttle pressed with the motor
 // (almost) stopped -> for TAKEUP_MS the motor only creeps at TAKEUP_KMH with at most TAKEUP_AMPS (enough for the
 // ~2 A cogging, too little to slam the clutch), whatever the pedal does; then the launch curve takes over.
@@ -145,7 +148,7 @@
 #define PIN_SOB    PA1            // SOB -> R56 -> PA1 (CN7_30)
 #define PIN_SOC    PA0            // SOC -> R55 -> PA0 (CN7_28)
 #define SHUNT_OHMS 0.002f
-#define CSA_GAIN   20.0f          // must match the CSA_GAIN written in drv8353.h
+#define CSA_GAIN   10.0f          // must match the CSA_GAIN written in drv8353.h (10 since 2026-11-09, was 20)
 
 // ---- sensors ------------------------------------------------------------------------------------
 #define PIN_HALL_A PB2

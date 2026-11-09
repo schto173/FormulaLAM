@@ -201,7 +201,7 @@ static float launchLimit(float kmh) {                                           
   return launchAmps[LAUNCH_POINTS - 1];
 }
 #else
-static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_MAX;     // starts at 10, hard max 20
+static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_MAX;     // starts at 10, hard max 30
 #endif
 #else
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;

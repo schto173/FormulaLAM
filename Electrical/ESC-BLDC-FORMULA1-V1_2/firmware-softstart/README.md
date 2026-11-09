@@ -5,6 +5,11 @@ Copy of `../firmware` (as of 2026-10-29, gear 9.41:1) with two additions in step
   -> 10 A from 15 km/h; 5 A/s ramp below 7 km/h, 2 A/s above. `L` still caps everything.
 - **Clutch take-up** (`TAKEUP_*`): throttle pressed with the motor below 2 km/h -> for 1 s the motor only creeps at
   ~1 km/h with at most 4 A (takes up the clutch slack gently), then the launch curve takes over.
+**2026-11-09: 30 A launch.** A log showed the car needs ~12-15 A just to break away and stood still ~3 s while
+the current crept up at 5 A/s. Now: launch curve 30 A at 0 km/h -> 20 A at 7 -> 10 A from 15 km/h, rise 30 A/s
+below 7 km/h, hard max (`CURRENT_MAX`) 30 A. For that the DRV8353 current amplifier runs at gain 10 instead of 20
+(range +-70 A instead of +-35 A; `CSA_CTRL` 0x240, `CSA_GAIN` 10). The 330 uF bus caps limit *continuous* current
+(~3 A ripple each at 15 A vs 1.65 A rated): 30 A only for the launch, 10 A continuous, a 3rd cap for more.
 The original firmware stays in `../firmware`. This folder builds into its own PlatformIO workspace
 (`ws/esc-hat-softstart`), so both can be built and flashed side by side.
 
