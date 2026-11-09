@@ -9,7 +9,8 @@ Copy of `../firmware` (as of 2026-10-29, gear 9.41:1) with two additions in step
 the current crept up at 5 A/s. Now: launch curve 30 A at 0 km/h -> 20 A at 7 -> 10 A from 15 km/h, rise 30 A/s
 below 7 km/h, hard max (`CURRENT_MAX`) 30 A. For that the DRV8353 current amplifier runs at gain 10 instead of 20
 (range +-70 A instead of +-35 A; `CSA_CTRL` 0x240, `CSA_GAIN` 10). The 330 uF bus caps limit *continuous* current
-(~3 A ripple each at 15 A vs 1.65 A rated): 30 A only for the launch, 10 A continuous, a 3rd cap for more.
+(~3 A ripple each at 15 A vs 1.65 A rated): 30 A only for the launch, then 15 A but at most 30 s in a row above
+10 A (`BURST_*`), then 10 A until the current was <= 10 A for 30 s. A 3rd cap would allow 15 A without the limit.
 The original firmware stays in `../firmware`. This folder builds into its own PlatformIO workspace
 (`ws/esc-hat-softstart`), so both can be built and flashed side by side.
 
@@ -85,7 +86,8 @@ a board. One screen from ~1280 x 720 (smaller windows scroll).
   limit (60 / 85 °C), re-arms after cooling 5 °C. Save CSV: all data + derived values + markers.
 Firmware data line (`D1` = every 100 ms, `D0` off, off after reset):
 `$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags,iq_meas,sd_meas,iq_calc,sd_calc,calc%`
-(flags 1 COAST, 2 armed, 4 throttle on, 8 reversed, 16 stall, 32 controller uses the calculated phase). The last five:
+(flags 1 COAST, 2 armed, 4 throttle on, 8 reversed, 16 stall, 32 controller uses the calculated phase,
+64 held at 10 A by the time limit). The last five:
 Iq of the last 100 ms computed two ways from the same samples - from the 3 measured phases and with the short-window
 phase calculated from the other two - as average and scatter (standard deviation), plus the share of samples where a
 phase was calculated. The dashboard shows them side by side under the Current chart (◀ = the one in use).

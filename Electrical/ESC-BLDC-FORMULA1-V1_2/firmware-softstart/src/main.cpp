@@ -347,6 +347,8 @@ static const float RADS_PER_KMH = GEAR_RATIO / (WHEEL_DIAMETER_M / 2.0f) / 3.6f;
 static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
 static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrPct = 0.0f;
 static float iCmd = 0.0f, vSetKmh = 0.0f, vMaxKmh = 0.0f;
+static uint32_t burstMs = 0, restMs = 0;           // time above / at-or-below BURST_BASE_A (board.h)
+static bool burstHold = false;                      // used up -> limit BURST_BASE_A until rested
 static bool stalled = false;                         // stall guard tripped, cleared when the throttle re-arms
 // drive direction: +1 normal, -1 reversed. Flips the sign of the current command and of the measured speed in
 // the drive logic only - speed limit, current limit, ramp, no-regen and COAST work the same both ways.
@@ -416,6 +418,17 @@ static void throttleTask() {
   if (now - t < 10) return;
   float dt = min((now - t) * 1e-3f, 0.05f);
   t = now;
+  // time limit above BURST_BASE_A (board.h): count while the current is above it, rest while at or below it
+  const uint32_t dms = (uint32_t)(dt * 1000.0f);
+  if (iCmd > BURST_BASE_A + 0.05f) { burstMs += dms; restMs = 0; }
+  else if (restMs < BURST_REST_MS && (restMs += dms) >= BURST_REST_MS) burstMs = 0;
+  if (!burstHold && burstMs >= BURST_MS) {
+    burstHold = true;
+    Serial.println("# time limit: 30 s above 10 A -> 10 A until the current has been at or below 10 A for 30 s (bus caps)");
+  } else if (burstHold && burstMs == 0) {
+    burstHold = false;
+    Serial.println("# time limit over: full current available again");
+  }
   if (!thrOn) return;
   float v = ain::throttleVolts();
   float x = 0.0f;
@@ -444,6 +457,7 @@ static void throttleTask() {
 #else
   float iMax = limitBase, ramp = CURRENT_RAMP_A_S;
 #endif
+  if (burstHold) iMax = min(iMax, BURST_BASE_A);
   bool pressed = x > 0.0f;
   if (pressed && !wasPressed && fabsf(vKmh) < TAKEUP_BELOW_KMH) tTake = now ? now : 1;   // new press from (near) standstill
   if (!pressed) tTake = 0;
@@ -674,6 +688,8 @@ static void temperatureTask() {
       if (stalled) Serial.print(" STALL (release throttle)");
     }
     if (coasting) Serial.print(" COAST");
+    if (burstHold) Serial.print(" | HELD AT 10 A (caps rest)");
+    else if (burstMs) { Serial.print(" | >10 A "); Serial.print(burstMs / 1000); Serial.print("/30 s"); }
 #endif
     Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
     if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
@@ -699,6 +715,7 @@ static void dataTask() {
   if (coasting) flags |= 1;
   if (driveDir < 0) flags |= 8;
   if (stalled) flags |= 16;
+  if (burstHold) flags |= 64;
   const float vel = fwdVelocity();
 #else
   const float kmh = 1.0f;                            // no gearing known outside step 5: km/h fields = rad/s

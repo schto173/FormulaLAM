@@ -634,7 +634,7 @@ function drawInstruments() {
   const rev = fresh && (r.flags & 8);
   document.querySelectorAll("#segDir button").forEach((b) => b.classList.toggle("sel", fresh && (b.dataset.c === (rev ? "R0" : "R1"))));
   $("dirNow").textContent = fresh ? (rev ? "reversed" : "normal") : "–";
-  const st = !fresh ? ["", "no data"] : (r.flags & 16) ? ["bad", "STALL - release throttle"] : (r.flags & 1) ? ["", "COAST"] : ((r.flags & 4) && !(r.flags & 2)) ? ["warn", "NOT ARMED"] : ["on", "DRIVING"];
+  const st = !fresh ? ["", "no data"] : (r.flags & 16) ? ["bad", "STALL - release throttle"] : (r.flags & 64) ? ["warn", "10 A - caps resting"] : (r.flags & 1) ? ["", "COAST"] : ((r.flags & 4) && !(r.flags & 2)) ? ["warn", "NOT ARMED"] : ["on", "DRIVING"];
   chip("chipState", st[0], st[1]);
   $("chipRec").querySelector("b").textContent = tstr;
 }

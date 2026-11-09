@@ -99,10 +99,18 @@
 #define LAUNCH_CURVE      1       // 1 = speed-dependent limit below (start limit = CURRENT_MAX), 0 = flat limit
 #define LAUNCH_POINTS     3
 #define LAUNCH_KMH        { 0.0f,  7.0f, 15.0f }   // km/h (motor speed)
-#define LAUNCH_AMPS       { 30.0f, 20.0f, 10.0f }  // A at those speeds (30 A only for a few seconds per start; 10 A floor)
+#define LAUNCH_AMPS       { 30.0f, 20.0f, 15.0f }  // A at those speeds (30 A only for a few seconds per start; 15 A floor,
+                                                   //   time-limited by BURST_* below; was 10 A)
                                                    //   2026-11-09: car needs ~12-15 A just to break away (log)
 #define LAUNCH_RAMP_A_S   30.0f   // A/s rise below the 2nd point: full launch current within ~1 s after the take-up
                                   //   (was 5: the car stood still ~3 s while the current crept up to ~15 A)
+// Time limit above BURST_BASE_A (2026-11-09), protects the two 330 uF bus caps (~3 A ripple each at 15 A vs 1.65 A
+// rated; they need minutes to heat up): at most BURST_MS in a row above BURST_BASE_A, then the limit is BURST_BASE_A
+// until the current has stayed at or below it for BURST_REST_MS. Every normal launch + acceleration fits in it,
+// only a long hill (or a strong headwind) falls back to 10 A for a while.
+#define BURST_BASE_A      10.0f   // A
+#define BURST_MS          30000   // ms above BURST_BASE_A in a row
+#define BURST_REST_MS     30000   // ms at or below BURST_BASE_A to get the full limit back
 // Clutch take-up (2026-10-29): the clutch engages hard after ~1/3 turn of slack. Throttle pressed with the motor
 // (almost) stopped -> for TAKEUP_MS the motor only creeps at TAKEUP_KMH with at most TAKEUP_AMPS (enough for the
 // ~2 A cogging, too little to slam the clutch), whatever the pedal does; then the launch curve takes over.
