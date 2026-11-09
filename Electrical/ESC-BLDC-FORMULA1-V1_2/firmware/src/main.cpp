@@ -191,7 +191,18 @@ void doC() { sensor.handleC(); }
 void doTarget(char *cmd) { command.scalar(&motor.target, cmd); }
 // "L<value>": limit before temperature derating - volts in steps 3-4, amps in step 5. Capped for the bench.
 #if STAGE == 5
-static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_MAX;     // starts at 10, hard max 15
+#if LAUNCH_CURVE
+static float limitBase = CURRENT_MAX; static const float LIMIT_CAP = CURRENT_MAX;       // launch curve sets the real limit
+static const float launchKmh[LAUNCH_POINTS] = LAUNCH_KMH, launchAmps[LAUNCH_POINTS] = LAUNCH_AMPS;
+static float launchLimit(float kmh) {                                                       // linear between the points
+  if (kmh <= launchKmh[0]) return launchAmps[0];
+  for (int i = 1; i < LAUNCH_POINTS; i++)
+    if (kmh < launchKmh[i]) return launchAmps[i - 1] + (launchAmps[i] - launchAmps[i - 1]) * (kmh - launchKmh[i - 1]) / (launchKmh[i] - launchKmh[i - 1]);
+  return launchAmps[LAUNCH_POINTS - 1];
+}
+#else
+static float limitBase = CURRENT_LIMIT; static const float LIMIT_CAP = CURRENT_MAX;     // starts at 10, hard max 30
+#endif
 #else
 static float limitBase = VOLTAGE_LIMIT; static const float LIMIT_CAP = 1.5f;
 #endif
@@ -320,10 +331,11 @@ static void busTask() {
   if (vb > BUS_OV_LIMIT) halt("bus over-voltage - energy pumped back into a supply that cannot take it?");
 }
 
-// No regenerative braking: a torque target against the rotation (above NO_REGEN_SPEED) becomes 0 = coast.
+// No regenerative braking: a torque target against the rotation (above NO_REGEN_PUSH_SPEED: bench 3 rad/s, pack
+// 40 rad/s, see board.h) becomes 0 = coast.
 static void noRegenTask() {
   if (motor.controller != MotionControlType::torque) return;
-  if (motor.target * motor.shaft_velocity < 0.0f && fabsf(motor.shaft_velocity) > NO_REGEN_SPEED) {
+  if (motor.target * motor.shaft_velocity < 0.0f && fabsf(motor.shaft_velocity) > NO_REGEN_PUSH_SPEED) {
     motor.target = 0.0f;
     static uint32_t tw = 0;
     if (millis() - tw > 1000) { tw = millis(); Serial.println("# no regen: target against the rotation -> 0, wait until it stops"); }
@@ -336,6 +348,8 @@ static const float RADS_PER_KMH = GEAR_RATIO / (WHEEL_DIAMETER_M / 2.0f) / 3.6f;
 static bool thrOn = THROTTLE_ON_AT_START, thrArmed = false;
 static float thrIdle = THROTTLE_IDLE_V, thrFull = THROTTLE_FULL_V, thrPct = 0.0f;
 static float iCmd = 0.0f, vSetKmh = 0.0f, vMaxKmh = 0.0f;
+static uint32_t burstMs = 0;                        // time account above BURST_BASE_A (board.h)
+static bool burstHold = false;                      // used up -> limit BURST_BASE_A until rested
 static bool stalled = false;                         // stall guard tripped, cleared when the throttle re-arms
 // drive direction: +1 normal, -1 reversed. Flips the sign of the current command and of the measured speed in
 // the drive logic only - speed limit, current limit, ramp, no-regen and COAST work the same both ways.
@@ -405,6 +419,18 @@ static void throttleTask() {
   if (now - t < 10) return;
   float dt = min((now - t) * 1e-3f, 0.05f);
   t = now;
+  // time limit above BURST_BASE_A (board.h): count while the current is above it, rest while at or below it
+  const uint32_t dms = (uint32_t)(dt * 1000.0f);
+  const bool above = iCmd > BURST_BASE_A + 0.05f;
+  if (above && fabsf(fwdVelocity()) >= BURST_FROM_KMH * RADS_PER_KMH) burstMs += dms;
+  else if (!above) burstMs = (burstMs > dms) ? burstMs - dms : 0;
+  if (!burstHold && burstMs >= BURST_MS) {
+    burstHold = true;
+    Serial.println("# time limit: 30 s above 10 A -> 10 A above 7 km/h until 30 s at or below 10 A paid it back (bus caps)");
+  } else if (burstHold && burstMs == 0) {
+    burstHold = false;
+    Serial.println("# time limit over: full current available again");
+  }
   if (!thrOn) return;
   float v = ain::throttleVolts();
   float x = 0.0f;
@@ -415,8 +441,9 @@ static void throttleTask() {
     x = constrain((v - thrIdle) / (thrFull - thrIdle), 0.0f, 1.0f);
   }
   thrPct = x * 100.0f;
+  static bool wasPressed = false; static uint32_t tTake = 0;          // clutch take-up (see board.h)
   if (!thrArmed) {
-    iCmd = 0.0f; motor.target = 0.0f;
+    iCmd = 0.0f; motor.target = 0.0f; wasPressed = false; tTake = 0;
     if (x <= 0.0f && !isnan(v) && v <= THROTTLE_FAULT_V && thrFull >= thrIdle + 0.2f) {
       thrArmed = true; stalled = false; Serial.println("# throttle armed");
     }
@@ -426,8 +453,23 @@ static void throttleTask() {
   vMaxKmh = constrain((motor.voltage_limit - SPEED_V_RESERVE) / KE_V_PER_RADS / RADS_PER_KMH, 0.0f, SPEED_MAX_KMH);
   vSetKmh = x * vMaxKmh;
   float vKmh = fwdVelocity() / RADS_PER_KMH;
-  float want = (x > 0.0f) ? constrain(SPEED_P_A_PER_KMH * (vSetKmh - vKmh), 0.0f, limitBase) : 0.0f;
-  iCmd = (want > iCmd) ? min(want, iCmd + CURRENT_RAMP_A_S * dt) : want;   // up: ramp, down: at once
+#if LAUNCH_CURVE
+  float iMax = min(limitBase, launchLimit(fabsf(vKmh)));                    // launch curve, capped by "L"
+  float ramp = (fabsf(vKmh) < launchKmh[1]) ? LAUNCH_RAMP_A_S : CURRENT_RAMP_A_S;
+#else
+  float iMax = limitBase, ramp = CURRENT_RAMP_A_S;
+#endif
+  if (burstHold && fabsf(vKmh) >= BURST_FROM_KMH) iMax = min(iMax, BURST_BASE_A);   // the launch stays free
+  bool pressed = x > 0.0f;
+  if (pressed && !wasPressed && fabsf(vKmh) < TAKEUP_BELOW_KMH) tTake = now ? now : 1;   // new press from (near) standstill
+  if (!pressed) tTake = 0;
+  wasPressed = pressed;
+  if (tTake && now - tTake >= TAKEUP_MS) tTake = 0;                    // take-up over -> launch curve
+  float want;
+  if (!pressed) want = 0.0f;
+  else if (tTake) want = constrain(TAKEUP_P_A_PER_KMH * (TAKEUP_KMH - vKmh), 0.0f, min(iMax, (float)TAKEUP_AMPS));   // creep
+  else want = constrain(SPEED_P_A_PER_KMH * (vSetKmh - vKmh), 0.0f, iMax);
+  iCmd = (want > iCmd) ? min(want, iCmd + ramp * dt) : want;               // up: ramp, down: at once
   // stall guard (see board.h): pushing hard without turning for STALL_TIME_MS -> 0 A until the throttle is released
   static uint32_t tStall = 0;
   if (iCmd >= STALL_CURRENT_A && fabsf(motor.shaft_velocity) < STALL_SPEED_RADS) {
@@ -555,7 +597,13 @@ void setup() {
   Serial.print(FOC_VOLTAGE_MAX, 0); Serial.print(" V, never above "); Serial.print(capFraction, 2);
   Serial.println(" x Vbus)");
   Serial.print("drive: throttle = max speed 0.."); Serial.print(SPEED_MAX_KMH, 0); Serial.print(" km/h, current 0..");
+#if LAUNCH_CURVE
+  for (int i = 0; i < LAUNCH_POINTS; i++) { Serial.print(launchAmps[i], 0); Serial.print(" A@"); Serial.print(launchKmh[i], 0); Serial.print(i < LAUNCH_POINTS - 1 ? "-" : ""); }
+  Serial.print(" km/h launch curve (L caps it), +"); Serial.print(LAUNCH_RAMP_A_S, 1); Serial.print(" A/s below "); Serial.print(launchKmh[1], 0);
+  Serial.print(" km/h, then +"); Serial.print(CURRENT_RAMP_A_S, 1);
+#else
   Serial.print(CURRENT_LIMIT, 0); Serial.print(" A (L up to "); Serial.print(CURRENT_MAX, 0); Serial.print(" A), +"); Serial.print(CURRENT_RAMP_A_S, 1);
+#endif
   Serial.print(" A/s, gear "); Serial.print(GEAR_RATIO, 1); Serial.print(":1, wheel "); Serial.print(WHEEL_DIAMETER_M, 3);
   Serial.println(" m");
 #endif
@@ -642,6 +690,8 @@ static void temperatureTask() {
       if (stalled) Serial.print(" STALL (release throttle)");
     }
     if (coasting) Serial.print(" COAST");
+    if (burstHold) Serial.print(" | HELD AT 10 A (caps rest)");
+    else if (burstMs) { Serial.print(" | >10 A "); Serial.print(burstMs / 1000); Serial.print("/30 s"); }
 #endif
     Serial.print(" | FET "); Serial.print(tf, 1); Serial.print(" C | motor ");
     if (isnan(tm)) { Serial.print(ain::motorSensorOhms(), 0); Serial.print(" ohm (type not set)"); }
@@ -667,6 +717,7 @@ static void dataTask() {
   if (coasting) flags |= 1;
   if (driveDir < 0) flags |= 8;
   if (stalled) flags |= 16;
+  if (burstHold) flags |= 64;
   const float vel = fwdVelocity();
 #else
   const float kmh = 1.0f;                            // no gearing known outside step 5: km/h fields = rad/s

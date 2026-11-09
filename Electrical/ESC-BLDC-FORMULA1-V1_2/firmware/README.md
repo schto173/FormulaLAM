@@ -1,4 +1,22 @@
-# ESC bring-up firmware (SimpleFOC)
+# ESC firmware (SimpleFOC)
+
+**Launch and clutch take-up** (merged from `firmware-softstart` on 2026-11-09 after it ran well in the car;
+step 5, `board.h`):
+- **Clutch take-up** (`TAKEUP_*`): throttle pressed with the motor below 2 km/h -> for 1 s the motor only creeps at
+  ~1 km/h with at most 4 A (takes up the clutch slack gently), then the launch curve takes over.
+- **Launch curve** (`LAUNCH_CURVE`): current limit follows the motor speed, linear 30 A at 0 km/h -> 20 A at 7 km/h
+  -> 15 A at 15 km/h, rise 30 A/s below 7 km/h, 2 A/s above. Hard max (`CURRENT_MAX`) 30 A; `L` still caps
+  everything. Reason: a log showed the car needs ~12-15 A just to break away and stood still ~3 s at 5 A/s.
+- **Current amplifier gain 10** instead of 20 (range +-70 A instead of +-35 A; `CSA_CTRL` 0x240, `CSA_GAIN` 10).
+- **Time limit for the bus caps** (`BURST_*`): the two 330 uF caps limit *continuous* current (~3 A ripple each at
+  15 A vs 1.65 A rated). Seconds above 10 A at >= 7 km/h fill a 30 s account, seconds at <= 10 A empty it; when
+  full the limit is 10 A above 7 km/h (data flag 64). The launch below 7 km/h is never limited. More caps of the
+  same type allow more continuous current.
+- **Push after take-up** (`NO_REGEN_PUSH_SPEED`): on the pack a forward push is allowed while the motor still turns
+  backwards slower than 40 rad/s – after the take-up the drivetrain springs back, and the no-regen rule used to
+  block the launch.
+
+The firmware before this merge is in the git history (commit 13a7ff9 and earlier).
 
 ## Setup (once)
 1. Install **VS Code** and the **PlatformIO IDE** extension.
@@ -71,7 +89,8 @@ a board. One screen from ~1280 x 720 (smaller windows scroll).
   limit (60 / 85 °C), re-arms after cooling 5 °C. Save CSV: all data + derived values + markers.
 Firmware data line (`D1` = every 100 ms, `D0` off, off after reset):
 `$D,ms,thr%,set_kmh,motor_kmh,rad_s,iq,id,uq,ud,umax,ilim,fet,mot,vbus,flags,iq_meas,sd_meas,iq_calc,sd_calc,calc%`
-(flags 1 COAST, 2 armed, 4 throttle on, 8 reversed, 16 stall, 32 controller uses the calculated phase). The last five:
+(flags 1 COAST, 2 armed, 4 throttle on, 8 reversed, 16 stall, 32 controller uses the calculated phase,
+64 held at 10 A by the time limit). The last five:
 Iq of the last 100 ms computed two ways from the same samples - from the 3 measured phases and with the short-window
 phase calculated from the other two - as average and scatter (standard deviation), plus the share of samples where a
 phase was calculated. The dashboard shows them side by side under the Current chart (◀ = the one in use).

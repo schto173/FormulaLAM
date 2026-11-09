@@ -44,8 +44,9 @@ static const Setting SETTINGS[] = {
   // VDS_LVL 0.3 V ~ 40 A (hot) .. 75 A (cold) across a 4-8 mOhm FET - far above our 10 A. LATCHED: one
   // over-current switches the bridge off and it stays off (no repeated hard cut-offs = no repeated spikes).
   { OCP_CTRL, 0x116, "OCP: dead time 100 ns, LATCHED shutdown, deglitch 2 us, VDS_LVL 0.3 V" },
-  // Bidirectional (VREF/2 = 1.65 V centre), 20 V/V: +-30 A * 2 mOhm * 20 = +-1.2 V -> 0.45..2.85 V
-  { CSA_CTRL, 0x280, "CSA: VREF/2 bidirectional, gain 20 V/V, sense OCP 0.25 V" },
+  // Bidirectional (VREF/2 = 1.65 V centre), 10 V/V: linear output 0.25..3.05 V = +-1.4 V / (2 mOhm * 10) = +-70 A
+  // (gain 20 ended at +-35 A - too tight for the 30 A launch). CSA_GAIN bits 7:6 = 01b.
+  { CSA_CTRL, 0x240, "CSA: VREF/2 bidirectional, gain 10 V/V, sense OCP 0.25 V" },
   { DRV_CTRL, DRV_CTRL_BASE, "driver control: 3x PWM (as TI's EVM), faults enabled" },
 };
 

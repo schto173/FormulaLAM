@@ -138,6 +138,11 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
     (Earlier: hard max 15 A,) every start still uses 10 A (`CURRENT_LIMIT`);
     15 A only via `L15` / the dashboard. Estimate at 15 A, 45 V continuous: ~8-9 W in the FETs, battery ~7 A ->
     15 A fuse. Load test at 5 / 10 A still to do before using 15 A.
+  - **2026-11-09: `firmware-softstart` merged into `firmware/`** after it ran well in the car (folder removed; old
+    firmware = commit 13a7ff9). Clutch take-up (1 s creep at ~1 km/h, max 4 A), launch curve 30 A @0 -> 20 A @7 ->
+    15 A @15 km/h (30 A/s below 7 km/h), `CURRENT_MAX` 30 A, CSA gain 10 (+-70 A), 30 s time account above 10 A at
+    >= 7 km/h for the two bus caps (`BURST_*`), `NO_REGEN_PUSH_SPEED` 40 rad/s. Car needs ~12-15 A to break away
+    (log). User report: FETs only ~35-40 C even when stalling / climbing -> the 2 bus caps are the limit, not the FETs.
   - Gearing note: with 8:1 and a 20" wheel (~0.508 m), 3500 rpm ≈ 42 km/h, 5250 rpm ≈ 63 km/h; 20–30 km/h at
     ~4500 rpm needs ~16–18:1.
   - **Bring-up steps 0–5 done on board #1 (24 V bench, no load).** Not yet tested: higher bus voltage / battery,
@@ -162,8 +167,8 @@ Read this first. `README.md` has the pin map and connector pinouts; `firmware/RE
   turns it on at 18.0 V, off at 16.8 V → bench bring-up at 20–24 V, not 12 V.**
 - DRV8353 integrated buck → VBUCK 12.1 V / 318 kHz → feeds only the DRV's VM pin (gate-drive supply).
   Both converters were re-verified against the TI datasheets on 2026-10-07.
-- Current sense: 2 mΩ shunts (R14/R15/R16, Kelvin via net ties NT1–3), CSA gain 20 V/V, bidirectional around
-  VREF/2 = 1.65 V → ±30 A ≈ 0.45…2.85 V. SOA/SOB/SOC on **PA4/PA1/PA0** (A and C crossed vs. pin order;
+- Current sense: 2 mΩ shunts (R14/R15/R16, Kelvin via net ties NT1–3), CSA gain 10 V/V since 2026-11-09 (was 20),
+  bidirectional around VREF/2 = 1.65 V → ±70 A full range (gain 20: ±30 A ≈ 0.45…2.85 V). SOA/SOB/SOC on **PA4/PA1/PA0** (A and C crossed vs. pin order;
   firmware had them swapped until 2026-10-14), all ADC2.
 - Temperatures: FET NTC TH1 (10k B3380, next to Q4) → 10k pull-up → **PA6**. Motor sensor (J8 pin 6, white wire) →
   2.2k pull-up, 1k series, 100 nF → **PA7**. Motor sensor type is unknown: at room temperature ~10 kΩ = NTC 10k,
@@ -202,9 +207,9 @@ very low → current ripple; try 20 / 30 / 40 kHz PWM and compare battery curren
 - If the VS Code PlatformIO extension fails to install Core (pip → PyPI "PermissionError 13"), install it from a
   normal terminal into the extension's venv: `%USERPROFILE%\.platformio\penv\Scripts\python.exe -m pip install -U platformio`.
 - EN (PA11) is driven by our code, not given to SimpleFOC: EN low puts the DRV8353 to sleep and resets its registers.
-- DRV8353 registers written at start (`include/drv8353.h`, SPI mode 1, 16-bit): GATE_HS 0x333 / GATE_LS 0x733
-  (IDRIVE 150 mA source / 300 mA sink instead of the very hard 1000/2000 mA default), OCP 0x157 (100 ns dead time,
-  auto-retry, VDS_LVL 0.4 V instead of 1 V which would never trip), CSA 0x280 (gain 20, VREF/2), DRV_CTRL 6×PWM.
+- DRV8353 registers written at start (`include/drv8353.h`, SPI mode 1, 16-bit): GATE_HS 0x311 / GATE_LS 0x711
+  (IDRIVE 50 mA source / 100 mA sink instead of the very hard 1000/2000 mA default), OCP 0x116 (100 ns dead time,
+  LATCHED shutdown, VDS_LVL 0.3 V), CSA 0x240 (gain 10, VREF/2), DRV_CTRL 0x020 = 3×PWM.
 - **Never call `analogRead()` once SimpleFOC's current sensing runs – on any pin.** The STM32 core de-inits the ADC
   after each `analogRead()` and force-resets ADC1+ADC2 together (shared ADC12 reset/clock), wiping SimpleFOC's
   injected setup on ADC2. All slow analog inputs go through `include/analog_in.h` instead: register-level single

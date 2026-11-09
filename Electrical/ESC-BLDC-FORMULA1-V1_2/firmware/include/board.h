@@ -13,7 +13,8 @@
 #define ALIGN_VOLTAGE     0.8f    // V used to align the halls in steps 4-5 on the bench (was 0.4 in 6x mode)
 #define VOLTAGE_LIMIT     1.0f    // V max applied to the motor in steps 3-4 (was 0.5 in 6x mode)
 #define CURRENT_LIMIT     10.0f   // A motor current limit after every start (step 5)
-#define CURRENT_MAX       20.0f   // A HARD maximum - "L" can raise the limit up to this, never above (2026-10-21).
+#define CURRENT_MAX       30.0f   // A HARD maximum - "L" can raise the limit up to this, never above (30 A for the
+                                  //   launch since 2026-11-09; was 20; needs CSA gain 10 = +-70 A range)
                                   //   20 A at 45 V continuous: ~12-15 W in the FETs (too much without heatsink -
                                   //   bursts only), battery ~10 A -> 20 A fuse + BMS discharge limit; VDS OCP 0.3 V
                                   //   still above 25 A peak x 8 mOhm hot. Edges clean at max load (scope, board #2).
@@ -63,7 +64,13 @@
 #define BUS_START_MAX     (BATTERY_CELLS * 4.30f)         // 12S: 51.6 V - above: wrong pack, refuse to start
 #define BUS_UV_STOP       (BATTERY_CELLS * 3.00f)         // 12S: 36.0 V - below for more than 2 s: stop (empty)
 #define ALIGN_V_BUS       1.2f    // V for hall + current-sense alignment on the pack (~0.6-0.7 V lost at 45 V)
+// Drive torque while the motor still turns slowly BACKWARDS (2026-11-09: after the clutch take-up the drivetrain
+// springs back, -0.6..-2 km/h, and the no-regen rule blocked the whole launch). Pushing forward against a slow
+// backward rotation feeds (almost) nothing back: the back-EMF (0.048 V per rad/s) stays below the R x I drop
+// (~2 V at 20 A) up to ~40 rad/s, and a 12S pack takes a few W anyway; BUS_OV_LIMIT still watches the bus.
+#define NO_REGEN_PUSH_SPEED 40.0f // rad/s backwards (~4 km/h at 9.41:1) up to which a forward push is allowed
 #else
+#define NO_REGEN_PUSH_SPEED NO_REGEN_SPEED   // bench supply: no exception
 #define BUS_OV_LIMIT      40.0f   // V, bench supply (max 30 V)
 #define BUS_START_MAX     35.0f
 #define BUS_UV_STOP       0.0f    // no under-voltage stop on the bench
@@ -91,6 +98,35 @@
                                   //   was -1 with 8:1; live: "R1" normal, "R0" reversed, at standstill)
 #define SPEED_P_A_PER_KMH 2.0f    // A per km/h too slow (5 km/h too slow = 10 A); P only -> holds ~0.5 km/h low
 #define CURRENT_RAMP_A_S  2.0f    // A/s the current may rise
+// Launch curve (2026-10-29): the current limit follows the MOTOR speed, linear between these points, flat after
+// the last one: strong pull from standstill, efficient acceleration and cruising later. "L" still caps all of it.
+// Uses motor speed on purpose: re-engaging the freewheel while rolling, the motor spins up from 0 almost without
+// load and reaches the wheel speed with the low limit already active -> soft engagement.
+#define LAUNCH_CURVE      1       // 1 = speed-dependent limit below (start limit = CURRENT_MAX), 0 = flat limit
+#define LAUNCH_POINTS     3
+#define LAUNCH_KMH        { 0.0f,  7.0f, 15.0f }   // km/h (motor speed)
+#define LAUNCH_AMPS       { 30.0f, 20.0f, 15.0f }  // A at those speeds (30 A only for a few seconds per start; 15 A floor,
+                                                   //   time-limited by BURST_* below; was 10 A)
+                                                   //   2026-11-09: car needs ~12-15 A just to break away (log)
+#define LAUNCH_RAMP_A_S   30.0f   // A/s rise below the 2nd point: full launch current within ~1 s after the take-up
+                                  //   (was 5: the car stood still ~3 s while the current crept up to ~15 A)
+// Time limit above BURST_BASE_A (2026-11-09), protects the two 330 uF bus caps (~3 A ripple each at 15 A vs 1.65 A
+// rated; they need minutes to heat up). A time account: every second above BURST_BASE_A at or above BURST_FROM_KMH
+// adds a second, every second at or below BURST_BASE_A (driving slower, coasting, standing) takes one off. Full
+// (BURST_MS) -> limit BURST_BASE_A above BURST_FROM_KMH until the account is empty again (30 s at <= 10 A).
+// The launch below BURST_FROM_KMH neither counts nor is limited: low speed = low voltage = little cap ripple.
+// (First version needed 30 s rest IN A ROW and counted the launch: short stops added up and the 3rd launch got 10 A.)
+#define BURST_BASE_A      10.0f   // A
+#define BURST_MS          30000   // ms in the account -> hold at BURST_BASE_A
+#define BURST_FROM_KMH    7.0f    // km/h (motor): counts and holds only at or above this speed
+// Clutch take-up (2026-10-29): the clutch engages hard after ~1/3 turn of slack. Throttle pressed with the motor
+// (almost) stopped -> for TAKEUP_MS the motor only creeps at TAKEUP_KMH with at most TAKEUP_AMPS (enough for the
+// ~2 A cogging, too little to slam the clutch), whatever the pedal does; then the launch curve takes over.
+#define TAKEUP_MS         1000    // ms
+#define TAKEUP_BELOW_KMH  2.0f    // only when the motor is slower than this at the moment the throttle is pressed
+#define TAKEUP_KMH        1.0f    // creep speed (motor, km/h equivalent; ~100 rpm at 9.41:1)
+#define TAKEUP_AMPS       4.0f    // A max during take-up
+#define TAKEUP_P_A_PER_KMH 4.0f   // creep controller: 4 A at standstill, 0 A at TAKEUP_KMH
 // Stall guard: at least STALL_CURRENT_A asked for while the motor turns slower than STALL_SPEED_RADS for
 // STALL_TIME_MS -> current 0, "STALL", throttle must be released to re-arm. Blocked (brake held) all power is
 // heat, concentrated in one phase's FETs, and the rotor buzzes on a hall edge. A start on the flat needs < 2 A.
@@ -128,7 +164,7 @@
 #define PIN_SOB    PA1            // SOB -> R56 -> PA1 (CN7_30)
 #define PIN_SOC    PA0            // SOC -> R55 -> PA0 (CN7_28)
 #define SHUNT_OHMS 0.002f
-#define CSA_GAIN   20.0f          // must match the CSA_GAIN written in drv8353.h
+#define CSA_GAIN   10.0f          // must match the CSA_GAIN written in drv8353.h (10 since 2026-11-09, was 20)
 
 // ---- sensors ------------------------------------------------------------------------------------
 #define PIN_HALL_A PB2

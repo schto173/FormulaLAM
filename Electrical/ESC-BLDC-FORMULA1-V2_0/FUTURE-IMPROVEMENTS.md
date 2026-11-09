@@ -14,8 +14,6 @@ weigh, not plans.
   current-measurement windows (at the 0.45 voltage cap the busiest phase gets ~11 µs instead of ~5.5 µs).
   Effort: ~10 lines in `CappedMotor::setPhaseVoltage` (main.cpp). The DRV8353's charge-pump high-side drive allows
   0 % / 100 % duty indefinitely. Test on the bench first, compare measured vs calculated Iq on the dashboard.
-- **Merge `firmware-softstart` into `firmware`** once the launch curve (20 → 15 → 10 A) and the clutch take-up
-  (1 s creep at ~1 km/h, max 4 A) have proven themselves.
 - **Re-engage at wheel speed (needs V2's wheel sensor J11 / PC6).** While rolling, spin the motor up to the wheel
   speed before applying torque – no 1 s take-up delay and no clutch bang when re-engaging at speed.
 - **Understand the board #2 VDS_OCP trip** (46.8 V, voltage fraction 0.48, no load, low-side FET phase B) with the
